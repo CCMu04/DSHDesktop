@@ -4,6 +4,8 @@
 
 First public preview of DSH Desktop, bundling DeepSeek Harness `0.1.0-rc.6`.
 
+![DSH Desktop main window](https://raw.githubusercontent.com/CCMu04/DSHDesktop/main/docs/images/dsh-desktop.png)
+
 ### Highlights
 
 - Official DSH Web UI in a native Windows desktop window, without changing upstream source.
