@@ -32,8 +32,8 @@ DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中�
 
 前往 [Releases](https://github.com/CCMu04/DSHDesktop/releases) 下载：
 
-- `DeepSeek Harness Setup ...exe`：推荐，标准 Windows 安装包。
-- `DeepSeek Harness ...exe`：免安装便携版。
+- [`DSH-Desktop-Setup-0.1.0-rc.6.4.exe`](https://github.com/CCMu04/DSHDesktop/releases/download/v0.1.0-rc.6.4/DSH-Desktop-Setup-0.1.0-rc.6.4.exe)：推荐，标准 Windows 安装包。
+- [`DSH-Desktop-Portable-0.1.0-rc.6.4.exe`](https://github.com/CCMu04/DSHDesktop/releases/download/v0.1.0-rc.6.4/DSH-Desktop-Portable-0.1.0-rc.6.4.exe)：免安装便携版。
 
 支持 Windows 10/11 x64。首次启动需要展开约 300 MB 的官方运行组件，因此会比后续启动稍慢。
 
