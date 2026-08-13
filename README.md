@@ -7,6 +7,8 @@
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows)](https://github.com/CCMu04/DSHDesktop/releases)
 [![License](https://img.shields.io/github/license/CCMu04/DSHDesktop)](LICENSE)
 
+![DSH Desktop 主界面](docs/images/dsh-desktop.png)
+
 ## 为什么做这个项目
 
 DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中启动和管理服务。DSH Desktop
