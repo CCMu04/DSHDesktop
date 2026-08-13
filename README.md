@@ -4,7 +4,7 @@
 > 不修改官方 DSH 源代码，直接运行并呈现官方 Web UI。
 
 [![DeepSeek Harness](https://img.shields.io/badge/DeepSeek-Harness-4D6BFE)](https://github.com/deepseek-ai/deepseek-harness)
-[![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows)](https://github.com/CCMu04/DSHDesktop/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows)](https://github.com/CCMu04/DSHDesktop/releases)
 [![License](https://img.shields.io/github/license/CCMu04/DSHDesktop)](LICENSE)
 
 ## 为什么做这个项目
@@ -28,7 +28,7 @@ DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中�
 
 ## 下载与安装
 
-前往 [Releases](https://github.com/CCMu04/DSHDesktop/releases/latest) 下载：
+前往 [Releases](https://github.com/CCMu04/DSHDesktop/releases) 下载：
 
 - `DeepSeek Harness Setup ...exe`：推荐，标准 Windows 安装包。
 - `DeepSeek Harness ...exe`：免安装便携版。
