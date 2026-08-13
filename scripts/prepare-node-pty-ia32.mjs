@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import electronPackage from 'electron/package.json' with { type: 'json' }
 
 if (process.platform !== 'win32' || process.arch !== 'x64') {
   throw new Error('The node-pty ia32 cross-build requires 64-bit Windows.')
@@ -16,10 +17,23 @@ if (!existsSync(nodeGyp)) throw new Error(`node-gyp is missing: ${nodeGyp}`)
 
 execFileSync(
   process.execPath,
-  [nodeGyp, 'rebuild', '--directory', nodePtyDirectory, '--arch=ia32'],
+  [
+    nodeGyp,
+    'rebuild',
+    '--directory', nodePtyDirectory,
+    '--arch=ia32',
+    `--target=${electronPackage.version}`,
+    '--dist-url=https://electronjs.org/headers',
+  ],
   {
     cwd: shellDirectory,
-    env: { ...process.env, npm_config_arch: 'ia32' },
+    env: {
+      ...process.env,
+      npm_config_arch: 'ia32',
+      npm_config_runtime: 'electron',
+      npm_config_target: electronPackage.version,
+      npm_config_disturl: 'https://electronjs.org/headers',
+    },
     stdio: 'inherit',
   },
 )
