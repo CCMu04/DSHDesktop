@@ -1,6 +1,6 @@
 {
   "name": "deepseek-harness-desktop",
-  "version": "0.1.0-rc.6.4",
+  "version": "0.1.0-rc.6.5",
   "description": "Unofficial Windows desktop shell for the unmodified DeepSeek Harness Web UI",
   "author": "CCMu04",
   "license": "MIT",
@@ -14,12 +14,14 @@
   "type": "module",
   "main": "main.mjs",
   "scripts": {
-    "test": "node --test test/*.test.mjs",
+    "test": "node --test test/*.test.mjs test/*.test.cjs",
     "start": "electron .",
     "sync:dsh": "node scripts/sync-dsh.mjs",
+    "prepare:node-pty-ia32": "node scripts/prepare-node-pty-ia32.mjs",
     "prepare:runtime": "node scripts/prepare-runtime.mjs",
-    "dist": "npm run sync:dsh && npm run prepare:runtime && electron-builder --win nsis portable --x64",
-    "dist:offline": "npm run prepare:runtime && electron-builder --win nsis portable --x64"
+    "dist": "npm run sync:dsh && npm run prepare:node-pty-ia32 && npm run prepare:runtime && electron-builder --win nsis portable --x64 --ia32",
+    "dist:offline": "npm run prepare:node-pty-ia32 && npm run prepare:runtime && electron-builder --win nsis portable --x64 --ia32",
+    "dist:x64:offline": "npm run prepare:runtime && electron-builder --win nsis portable --x64"
   },
   "dependencies": {
     "@deepseek-ai/cordis-plugin-group": "1.0.1",
@@ -49,7 +51,8 @@
   "devDependencies": {
     "7zip-bin": "5.2.0",
     "electron": "43.4.0",
-    "electron-builder": "26.15.3"
+    "electron-builder": "26.15.3",
+    "node-gyp": "12.4.0"
   },
   "build": {
     "appId": "ai.deepseek.harness.desktop",
@@ -61,6 +64,8 @@
     },
     "files": [
       "main.mjs",
+      "builtin-plugin.mjs",
+      "native-open-bridge.mjs",
       "toolchain.mjs",
       "runtime-preload.cjs",
       "loading.html",
@@ -83,13 +88,22 @@
       },
       {
         "from": "node_modules/7zip-bin/win/x64/7za.exe",
-        "to": "runtime/7za.exe"
+        "to": "runtime/7za-x64.exe"
+      },
+      {
+        "from": "node_modules/7zip-bin/win/ia32/7za.exe",
+        "to": "runtime/7za-ia32.exe"
+      },
+      {
+        "from": "plugins/dsh-desktop-ui",
+        "to": "plugins/dsh-desktop-ui"
       }
     ],
     "win": {
       "icon": "assets/icon.png"
     },
     "nsis": {
+      "artifactName": "DSH-Desktop-Setup-${version}-${arch}.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
@@ -97,6 +111,9 @@
       "createStartMenuShortcut": true,
       "shortcutName": "DeepSeek Harness",
       "differentialPackage": true
+    },
+    "portable": {
+      "artifactName": "DSH-Desktop-Portable-${version}-${arch}.${ext}"
     }
   }
 }

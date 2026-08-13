@@ -1,0 +1,50 @@
+name: Release preview
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run prepare:node-pty-ia32
+      - run: npm run prepare:runtime
+      - run: npx electron-builder --win nsis portable --x64 --ia32
+      - name: Save preview assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSH-Desktop-${{ github.run_id }}
+          path: |
+            dist/DSH-Desktop-Setup-*.exe
+            dist/DSH-Desktop-Portable-*.exe
+          if-no-files-found: error
+      - name: Publish preview assets
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $assets = Get-ChildItem -LiteralPath dist -File |
+            Where-Object Name -Match '^DSH-Desktop-(Setup|Portable)-.+-(x64|ia32)\.exe$' |
+            Select-Object -ExpandProperty FullName
+          if ($assets.Count -ne 4) {
+            throw "Expected four release assets, found $($assets.Count)."
+          }
+          gh release create $env:GITHUB_REF_NAME @assets `
+            --repo $env:GITHUB_REPOSITORY `
+            --title "DSH Desktop $env:GITHUB_REF_NAME" `
+            --notes-file RELEASE_NOTES.md `
+            --prerelease `
+            --verify-tag

@@ -4,6 +4,7 @@
 // Make ordinary Windows child processes background-safe for a GUI application.
 const childProcess = require('node:child_process')
 const { registerHooks, syncBuiltinESMExports } = require('node:module')
+const path = require('node:path')
 
 // DSH's restricted-token child must share its host console, but it can still
 // ask Windows not to show that shared console window. Apply STARTF_USESHOWWINDOW
@@ -39,6 +40,21 @@ function isWindowsAclRunner(command, args) {
     && /dsh-sandbox-windows-acl[\\/].*runner\.js$/i.test(arg))
 }
 
+function isNativePathOpener(command, args) {
+  const executable = path.basename(command).toLowerCase()
+  if (executable !== 'powershell.exe' && executable !== 'powershell' && executable !== 'pwsh.exe' && executable !== 'pwsh') {
+    return false
+  }
+  return args.some(arg => typeof arg === 'string' && /\bInvoke-Item\s+-LiteralPath\b/iu.test(arg))
+}
+
+function nativeOpenEnvironment(options) {
+  const environment = { ...(options?.env ?? process.env) }
+  delete environment.ELECTRON_RUN_AS_NODE
+  delete environment.NODE_OPTIONS
+  return { ...(options ?? {}), env: environment, windowsHide: true }
+}
+
 function desktopOptions(command, args, options) {
   // DSH's restricted-token sandbox explicitly requires an inherited console:
   // CREATE_NO_WINDOW makes the confined child fail during DLL initialization.
@@ -58,9 +74,24 @@ childProcess.spawnSync = function desktopSpawnSync(command, args, options) {
   return spawnSync.call(this, command, desktopOptions(command, [], args))
 }
 
+const execFile = childProcess.execFile
+childProcess.execFile = function desktopExecFile(command, args, options, callback) {
+  if (!Array.isArray(args) || !isNativePathOpener(command, args)) {
+    return execFile.apply(this, arguments)
+  }
+  if (typeof options === 'function') {
+    const nativeOptions = nativeOpenEnvironment(undefined)
+    return execFile.call(this, command, args, nativeOptions, options)
+  }
+  const nativeOptions = nativeOpenEnvironment(options)
+  return execFile.call(this, command, args, nativeOptions, callback)
+}
+
 // Refresh named ESM imports such as `import { spawn } from 'node:child_process'`.
 syncBuiltinESMExports()
 
 // Keep ELECTRON_RUN_AS_NODE: DSH intentionally uses process.execPath for its
-// ACL sandbox runner and other Node-side helpers. External desktop opens are
-// handled by DSH's own hidden native-command adapter.
+// ACL sandbox runner and other Node-side helpers. The native opener receives a
+// clean environment so an Electron-based editor does not inherit Node mode.
+
+module.exports = { isNativePathOpener, nativeOpenEnvironment }
