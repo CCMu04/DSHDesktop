@@ -1,0 +1,102 @@
+{
+  "name": "deepseek-harness-desktop",
+  "version": "0.1.0-rc.6.4",
+  "description": "Unofficial Windows desktop shell for the unmodified DeepSeek Harness Web UI",
+  "author": "CCMu04",
+  "license": "MIT",
+  "homepage": "https://github.com/CCMu04/DSHDesktop#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CCMu04/DSHDesktop.git"
+  },
+  "bugs": "https://github.com/CCMu04/DSHDesktop/issues",
+  "private": true,
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "start": "electron .",
+    "sync:dsh": "node scripts/sync-dsh.mjs",
+    "prepare:runtime": "node scripts/prepare-runtime.mjs",
+    "dist": "npm run sync:dsh && npm run prepare:runtime && electron-builder --win nsis portable --x64",
+    "dist:offline": "npm run prepare:runtime && electron-builder --win nsis portable --x64"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis-plugin-group": "1.0.1",
+    "@deepseek-ai/dsh": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-anonymous-user-id": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-atomic-write": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-bash-local": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-code-runtime": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-compaction": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-fs": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-invariants": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-output-retention": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-sandbox": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-scope": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session-telemetry": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session-title-llm": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-shell": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-spill": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-subagent-in-process-driver": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-subprocess": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-timeout": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-workflow": "0.1.0-rc.6",
+    "@emnapi/runtime": "1.11.3",
+    "@img/sharp-wasm32": "0.35.3",
+    "pnpm": "11.21.0"
+  },
+  "devDependencies": {
+    "7zip-bin": "5.2.0",
+    "electron": "43.4.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "ai.deepseek.harness.desktop",
+    "productName": "DeepSeek Harness",
+    "asar": true,
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.mjs",
+      "toolchain.mjs",
+      "runtime-preload.cjs",
+      "loading.html",
+      "assets/**/*",
+      "!node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "runtime-preload.cjs",
+        "to": "runtime-preload.cjs"
+      },
+      {
+        "from": "build/runtime/dsh-runtime.7z",
+        "to": "runtime/dsh-runtime.7z"
+      },
+      {
+        "from": "build/runtime/runtime.json",
+        "to": "runtime/runtime.json"
+      },
+      {
+        "from": "node_modules/7zip-bin/win/x64/7za.exe",
+        "to": "runtime/7za.exe"
+      }
+    ],
+    "win": {
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DeepSeek Harness",
+      "differentialPackage": true
+    }
+  }
+}
