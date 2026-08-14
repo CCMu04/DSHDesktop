@@ -1,18 +1,14 @@
-# DSH Desktop v0.1.0-rc.6.5.3 preview
+# DSH Desktop v0.1.0-rc.6.5.3 预览版
 
-Settings drawer close fix.
+设置抽屉关闭逻辑修复。
 
-![DSH Desktop showing the bundled desktop-ui plugin enabled](https://raw.githubusercontent.com/CCMu04/DSHDesktop/main/docs/images/dsh-desktop-plugin.jpg)
+## 更新内容
 
-## Highlights
+### 修复
 
-- The settings drawer now closes only on genuine mask clicks. Previously, interacting with
-  portaled UI above the mask — dropdown popups on the General page, the agent-preset view
-  dialog — closed the whole settings page; those controls now work normally, while clicking
-  the dimmed mask, the close button, or pressing Escape still closes the drawer.
-- Everything from v0.1.0-rc.6.5.2 is unchanged.
+- 设置抽屉仅在真正点击遮罩（面板外的暗色区域）时关闭。此前与浮层 UI 交互——通用页的下拉框弹层、预设查看弹窗——会误关整个设置页；现在这些控件可以正常工作，而点击遮罩、点击关闭按钮或按 Esc 仍可关闭抽屉。
+- v0.1.0-rc.6.5.2 的全部内容保持不变。
 
-## Verified
+## 验证
 
-- 5 automated desktop integration tests pass.
-- All screenshots in this release show only the DSH Desktop application window.
+- 5 项自动化桌面集成测试全部通过。

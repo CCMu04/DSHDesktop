@@ -1,105 +1,76 @@
-# Changelog
+# 更新日志
+
+本文件记录 DSH Desktop 各版本的变更，新版本在上。格式固定为：版本标题（`## v<版本号> — <日期>`）+ 分类小节（新增 / 修复 / 变更 / 移除）。
 
 ## v0.1.0-rc.6.5.3 — 2026-08-14
 
-Settings drawer close fix.
+设置抽屉关闭逻辑修复。
 
-### Fixed
+### 修复
 
-- Only close the settings drawer on genuine mask clicks. The close-animation shim treated any
-  click outside the settings panel as a mask click, so interacting with portaled UI above the
-  mask (dropdown popups, the agent-preset view dialog) closed the whole settings page.
+- 设置抽屉仅在真正点击遮罩（面板外的暗色区域）时关闭。此前的关闭动画垫片把设置面板外的任意点击都当作遮罩点击，导致与浮层 UI（下拉框弹层、预设查看弹窗）交互时会误关整个设置页。
 
 ## v0.1.0-rc.6.5.2 — 2026-08-14
 
-Desktop UI polish: open a workspace folder from the sidebar.
+桌面体验打磨：从侧边栏打开工作区文件夹。
 
-### Added
+### 新增
 
-- Right-click a workspace in the sidebar and choose "在资源管理器中打开" / "Open in Explorer" to
-  reveal the workspace directory in Windows Explorer, routed through the official
-  `host.openPath` API.
+- 侧边栏中右键工作区可选择「在资源管理器中打开」，通过官方 `host.openPath` API 在 Windows 资源管理器中定位工作区目录。
 
-### Changed
+### 变更
 
-- Retire the desktop native-open bridge (`native-open-bridge.mjs`). Path opens now go through
-  the official Host opener alone, whose `Invoke-Item` subprocesses already get a clean
-  environment from the backend preload; the Electron mirror previously opened each folder a
-  second time for page-initiated requests.
+- 移除桌面端原生打开桥（`native-open-bridge.mjs`）。路径打开统一由官方 Host opener 承担，其 `Invoke-Item` 子进程环境已由后端 preload 清洗；此前 Electron 镜像会在页面发起的请求上把每个文件夹二次打开。
 
-### Fixed
+### 修复
 
-- Disable the header drag surface while an `aria-modal` dialog is open (settings drawer,
-  session-export dialog, ...). Electron hit-tests drag regions at the window level, so an
-  overlay above the header used to swallow clicks as window dragging - the settings drawer's
-  top row (title, actions, close button) landed inside the header's rect and could not be
-  clicked. The drag surface returns as soon as the dialog closes.
+- 有模态对话框（设置抽屉、会话日志导出弹窗等）打开时禁用头部拖拽区。Electron 在窗口层对拖拽区做命中测试，覆盖在头部上方的浮层会把点击当作窗口拖动——设置抽屉顶部一行（标题、操作、关闭按钮）因此无法点击。对话框关闭后拖拽区自动恢复。
 
 ## v0.1.0-rc.6.5.1 — 2026-08-14
 
-Follow-up to the rc.6.5 preview: window dragging is back without blocking the session header.
+rc.6.5 预览版的跟进：恢复窗口拖拽且不遮挡会话头部。
 
-### Fixed
+### 修复
 
-- Make the session header the window drag surface, with its buttons opted out via `no-drag`, so
-  the session breadcrumbs and the header actions (jobs, subagents, session-log export) stay
-  clickable while the window can still be dragged by the header's empty areas. The loading
-  screen keeps its own drag strip.
+- 以会话头部作为窗口拖拽区，按钮通过 `no-drag` 豁免，因此会话面包屑与头部操作（任务、子代理、会话日志导出）保持可点击，同时仍可通过头部空白区域拖动窗口。启动页保留独立拖拽条。
+- 修复拖拽区选择器未生效的问题：插槽出口会把内容包在 `display: contents` 的 `<div data-slot>` 中，选择器改为锚定 `conversation.session.header` 插槽后拖拽区才真正生效。
 
 ## v0.1.0-rc.6.5 — 2026-08-14
 
-Desktop integration preview, still bundling unmodified DeepSeek Harness
-`0.1.0-rc.6`.
+桌面集成预览版，仍然打包未修改的 DeepSeek Harness `0.1.0-rc.6`。
 
-![Bundled desktop-ui plugin enabled](https://raw.githubusercontent.com/CCMu04/DSHDesktop/v0.1.0-rc.6.5/docs/images/dsh-desktop-plugin.jpg)
+### 修复
 
-### Fixed
+- 在官方 Host 请求完成后，设置文件与工作区目录通过 Windows 原生 shell 打开，避免 VS Code 等应用继承 Electron 的 Node 模式。
+- 额外兼容性防护：从 DSH 原生 opener 子进程中清除仅后端需要的 `ELECTRON_RUN_AS_NODE` 与 `NODE_OPTIONS`。
 
-- Open settings files and workspace directories through Electron's native Windows shell after the
-  official Host request completes, avoiding inherited Electron Node mode in VS Code and other apps.
-- Strip backend-only `ELECTRON_RUN_AS_NODE` and `NODE_OPTIONS` from DSH native opener subprocesses as
-  an additional compatibility guard.
+### 新增
 
-### Added
+- 随应用内置 `dsh-desktop-ui` 插件。首次使用或内置插件内容变化后自动安装并启用一次，之后保持用户的启停选择。
+- 产出 x64 与 ia32 的安装包和便携版：ia32 运行时交叉编译上游 `node-pty` 原生模块，并附带匹配的 32 位 7-Zip 解压器。
+- 新增基于 tag 的预览发布工作流与按架构命名的产物。
 
-- Bundle `dsh-desktop-ui` with the app. It is installed and enabled once on first use and once after
-  bundled plugin content changes; later launches preserve the user's enabled/disabled choice.
-- Produce x64 and ia32 installer and portable assets. The ia32 runtime cross-builds the upstream
-  `node-pty` native modules and ships the matching 32-bit 7-Zip extractor.
-- Add a tag-driven preview Release workflow and architecture-qualified artifact names.
+### 变更（2026-08-14）
 
-### Revised (2026-08-14)
+- 后端改由内置的官方 Node.js 24 运行时运行，不再使用 Electron-as-Node。Electron 运行时下，原生工作区目录选择器（koffi）致命崩溃——选择文件夹后「打开工作区」失败，且 node-pty 输出事件不触发，导致 `backend.log` 长期无日志。两者均已恢复：原生文件夹对话框重新可用，后端日志正常写入。
+- 后端输出改由普通隐藏管道捕获，不再使用无头 ConPTY。
+- 移除 ia32 构建；x64 是唯一受支持的架构（Node 24 无 32 位构建），安装包改为内置官方 `node.exe`（v24.18.1）运行时。
 
-- Run the DSH backend on a bundled official Node.js 24 runtime instead of Electron-as-Node. Under
-  Electron's runtime the native workspace directory picker (koffi) aborted fatally — "open workspace"
-  failed after picking a folder — and node-pty output events never fired, leaving `backend.log`
-  permanently silent. Both are restored: the native folder dialog works again and backend logs are
-  written.
-- Capture backend output through plain hidden pipes instead of a headless ConPTY.
-- Drop the ia32 builds; x64 is the only supported architecture (Node 24 ships no 32-bit binaries),
-  and the installer now bundles the official `node.exe` (v24.18.1) runtime.
+### 验证
 
-### Validation
-
-- Seven automated tests cover the native-open bridge, Electron environment cleanup, toolchain, and
-  bundled-plugin lifecycle.
-- Isolated-Home UI smoke testing confirmed settings.yaml opens in VS Code, desktop-ui appears enabled,
-  and a same-version restart preserves a manual plugin disable.
-- The revised build was smoke-tested end to end: the backend runs on the bundled `node.exe`, logs
-  reach `backend.log`, `host.pickDirectory` opens and closes the native folder dialog without
-  crashing, and core APIs (sessions, host describe) respond.
+- 7 项自动化测试覆盖原生打开桥、Electron 环境清洗、工具链与内置插件生命周期。
+- 隔离 Home 的 UI 冒烟测试确认：`settings.yaml` 能在 VS Code 中打开、desktop-ui 显示为已启用、同版本重启后手动停用保持生效。
+- 修订后的构建全链路冒烟：后端运行在内置 `node.exe` 上、日志写入 `backend.log`、`host.pickDirectory` 能打开并关闭原生文件夹对话框而不崩溃，核心 API（sessions、host describe）正常响应。
 
 ## v0.1.0-rc.6.4 — 2026-08-14
 
-First public preview of DSH Desktop, bundling DeepSeek Harness `0.1.0-rc.6`.
+DSH Desktop 的首个公开预览版，打包 DeepSeek Harness `0.1.0-rc.6`。
 
-![DSH Desktop main window](https://raw.githubusercontent.com/CCMu04/DSHDesktop/main/docs/images/dsh-desktop.png)
+### 亮点
 
-### Highlights
-
-- Official DSH Web UI in a native Windows desktop window, without changing upstream source.
-- Shared `~/.dsh` configuration, sessions, profiles, credentials, and persistent plugins.
-- Bundled DSH, Node, and pnpm toolchain; no global DSH installation required.
-- Incremental runtime cache and NSIS block map generation.
-- Headless ConPTY backend and hidden Windows sandbox console windows.
-- Verified PowerShell output, non-zero exit codes, background tasks, and workspace file writes.
+- 原生 Windows 桌面窗口中呈现官方 DSH Web UI，不改动上游源码。
+- 共用 `~/.dsh` 配置、会话、Profiles、凭据与持久插件。
+- 自带 DSH、Node 与 pnpm 工具链，无需全局安装 DSH。
+- 增量运行时缓存与 NSIS block map 生成。
+- 无头 ConPTY 后端与隐藏的 Windows 沙箱控制台窗口。
+- 验证了 PowerShell 输出、非零退出码、后台任务与工作区文件写入。
