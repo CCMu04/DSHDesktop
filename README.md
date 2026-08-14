@@ -28,8 +28,8 @@ DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中�
   包；相同版本不会重复解压。
 - **跟随官方版本**：构建命令会查询 npm 上最新的 DSH 及配套组件，Dependabot 也会每周检查更新。
 - **桌面体验优化**：原生窗口、简洁标题栏、合理的初始尺寸、单实例运行和外部链接安全打开。
-- **可靠的原生打开**：配置文件与工作区目录由 Electron 主进程交给 Windows，避免后端 Node 环境
-  污染 VS Code 等 Electron 应用。
+- **可靠的原生打开**：配置文件与工作区目录由官方 opener 打开，子进程环境经过清洗，不会把
+  后端 Node 环境泄漏给 VS Code 等 Electron 应用。
 - **内置 desktop-ui**：首次使用或内置插件版本更新后的首次启动会安装并默认启用一次；此后不再
   修复或强制启用，用户的停用、启用或移除选择始终优先。
 - **本地优先**：Web 服务只监听随机的本机回环端口，不对局域网暴露。
@@ -91,9 +91,10 @@ Node.js 运行时中（DSH 的原生目录选择器依赖的 koffi 绑定与 nod
 下不可用，因此后端不能借用 Electron 进程）；桌面兼容层只调整 Windows 进程的窗口显示状态，
 不取消控制台，也不绕过 DSH 的 ACL 沙箱。官方包在磁盘上保持原样。
 
-设置页的配置文件打开请求与目录打开请求仍先交给官方 Host 校验和处理；请求完成后，桌面壳再由
-Electron 主进程执行一次 Windows 原生打开。这一适配避免后端必须携带的
-`ELECTRON_RUN_AS_NODE`/`NODE_OPTIONS`，不会修改官方 Host 或 Web UI 源码。
+设置页的配置文件打开请求与目录打开请求由官方 Host 原样处理：官方 opener（Windows
+`Invoke-Item`）负责校验和打开，桌面端仅通过后端 preload 在派生 opener 子进程时清除
+`ELECTRON_RUN_AS_NODE`/`NODE_OPTIONS`，避免这些变量污染 VS Code 等被打开的应用。不会修改
+官方 Host 或 Web UI 源码。
 
 ## 安全与隐私
 

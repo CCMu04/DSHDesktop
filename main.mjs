@@ -18,7 +18,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, Menu, shell } from 'electron'
 import { ensureBundledPlugin } from './builtin-plugin.mjs'
-import { installNativeOpenBridge } from './native-open-bridge.mjs'
 import { prepareDesktopToolchain } from './toolchain.mjs'
 
 const shellDirectory = path.dirname(fileURLToPath(import.meta.url))
@@ -437,13 +436,6 @@ async function launch() {
   await setLoadingStatus('正在启动本地服务…')
   const port = await reservePort()
   backendOrigin = `http://${backendHost}:${port}`
-  installNativeOpenBridge({
-    webRequest: mainWindow.webContents.session.webRequest,
-    backendOrigin,
-    settingsPath: path.join(context.dshHome, 'settings.yaml'),
-    openPath: target => shell.openPath(target),
-    reportError: appendBackendOutput,
-  })
   startBackend(port, context)
   await waitForBackend(`${backendOrigin}/`)
   await mainWindow.loadURL(`${backendOrigin}/`)

@@ -8,7 +8,14 @@ Desktop UI polish: open a workspace folder from the sidebar.
 
 - Right-click a workspace in the sidebar and choose "在资源管理器中打开" / "Open in Explorer" to
   reveal the workspace directory in Windows Explorer, routed through the official
-  `host.openPath` API and the desktop native-open bridge.
+  `host.openPath` API.
+
+### Changed
+
+- Retire the desktop native-open bridge (`native-open-bridge.mjs`). Path opens now go through
+  the official Host opener alone, whose `Invoke-Item` subprocesses already get a clean
+  environment from the backend preload; the Electron mirror previously opened each folder a
+  second time for page-initiated requests.
 
 ## v0.1.0-rc.6.5.1 — 2026-08-14
 
