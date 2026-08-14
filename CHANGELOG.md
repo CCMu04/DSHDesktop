@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.0-rc.6.5.3 — 2026-08-14
+
+Settings drawer close fix.
+
+### Fixed
+
+- Only close the settings drawer on genuine mask clicks. The close-animation shim treated any
+  click outside the settings panel as a mask click, so interacting with portaled UI above the
+  mask (dropdown popups, the agent-preset view dialog) closed the whole settings page.
+
 ## v0.1.0-rc.6.5.2 — 2026-08-14
 
 Desktop UI polish: open a workspace folder from the sidebar.
