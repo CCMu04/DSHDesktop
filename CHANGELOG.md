@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.0-rc.6.5.2 — 2026-08-14
+
+Desktop UI polish: open a workspace folder from the sidebar.
+
+### Added
+
+- Right-click a workspace in the sidebar and choose "在资源管理器中打开" / "Open in Explorer" to
+  reveal the workspace directory in Windows Explorer, routed through the official
+  `host.openPath` API and the desktop native-open bridge.
+
 ## v0.1.0-rc.6.5.1 — 2026-08-14
 
 Follow-up to the rc.6.5 preview: window dragging is back without blocking the session header.

@@ -469,6 +469,8 @@ window.__ModuleLoader__.load({
 		const dshFloatStore = (0, _deepseek_ai_dsh_client_runtime_client.createSnapshotStore)({
 			menu: null
 		});
+		/** Workspace directory open handler installed by apply(); runContextAction dispatches into it. */
+		let desktopOpenWorkspacePath = null;
 		/** Show the right-click menu at a viewport point, flipping near the edges. */
 		function showFloatingMenu(x, y, items, target, payload) {
 			const itemHeight = 26;
@@ -573,6 +575,13 @@ window.__ModuleLoader__.load({
 			const snapshot = dshFloatStore.getSnapshot();
 			const menu = snapshot.menu;
 			hideFloatingMenu();
+			if (id === "openInExplorer") {
+				const path = menu !== null && menu.payload !== void 0 ? menu.payload.workspacePath : void 0;
+				if (typeof path === "string" && path !== "" && desktopOpenWorkspacePath !== null) {
+					desktopOpenWorkspacePath(path);
+				}
+				return;
+			}
 			if (id === "reload") {
 				globalThis.location?.reload();
 				return;
@@ -632,12 +641,34 @@ window.__ModuleLoader__.load({
 			const ok = await (0, _deepseek_ai_dsh_client_ui_primitives.writeClipboard)(src);
 			return ok ? "url" : "";
 		}
-		/** Install the right-click behaviors. */
-		function installChatContextMenu() {
+		/**
+		* Install the right-click behaviors.
+		* @param options.t - bound locale lookup for the workspace row's menu labels.
+		* @param options.resolveWorkspacePath - map a workspace row label to its directory path.
+		* @param options.openWorkspacePath - open one workspace directory (host.openPath).
+		*/
+		function installChatContextMenu({ t, resolveWorkspacePath, openWorkspacePath } = {}) {
+			desktopOpenWorkspacePath = openWorkspacePath ?? null;
 			const FIELD_SELECTOR = 'textarea, input[type="text"], input[type="search"], input:not([type])';
 			const onContextMenu = (event) => {
 				const target = event.target;
 				if (typeof target?.closest !== "function") return;
+				// Workspace rows in the sidebar tree carry aria-expanded (session
+				// rows carry aria-selected instead), so the treeitem + expanded
+				// pair pins the workspace folder rows exactly.
+				const workspaceRow = target.closest('[role="treeitem"][aria-expanded]');
+				if (workspaceRow !== null) {
+					const label = (workspaceRow.textContent ?? "").trim();
+					const path = resolveWorkspacePath(label);
+					if (path !== void 0) {
+						event.preventDefault();
+						event.stopImmediatePropagation();
+						showFloatingMenu(event.clientX, event.clientY, [
+							{ id: "openInExplorer", label: t("openWorkspace") }
+						], void 0, { workspacePath: path });
+					}
+					return;
+				}
 				const field = target.closest(FIELD_SELECTOR);
 				if (field !== null) {
 					event.preventDefault();
@@ -891,7 +922,9 @@ window.__ModuleLoader__.load({
 			"plugin.presetGroup": "预设插件",
 			"openDocument": "打开配置文件",
 			"openDocument.error": "无法打开配置文件",
-			"openDocument.success": "已请求打开配置文件"
+			"openDocument.success": "已请求打开配置文件",
+			"openWorkspace": "在资源管理器中打开",
+			"openWorkspace.error": "无法打开工作区目录"
 		};
 		const en = {
 			"trigger.label": "Session log",
@@ -923,7 +956,9 @@ window.__ModuleLoader__.load({
 			"plugin.presetGroup": "Preset plugins",
 			"openDocument": "Open configuration file",
 			"openDocument.error": "Could not open configuration file",
-			"openDocument.success": "Configuration file open requested"
+			"openDocument.success": "Configuration file open requested",
+			"openWorkspace": "Open in Explorer",
+			"openWorkspace.error": "Could not open the workspace directory"
 		};
 		//#endregion
 		//#region lib/client/index.js
@@ -945,7 +980,24 @@ window.__ModuleLoader__.load({
 				id: "dsh-desktop-ui-ctx",
 				inject: () => ({ hooks: { floatState: dshFloatStore } })
 			}, DesktopUiFloatHost));
-			ctx.effect(() => installChatContextMenu(), "dsh-desktop-ui: chat context menu");
+			ctx.effect(() => installChatContextMenu({
+				t,
+				resolveWorkspacePath: (label) => {
+					const workspaces = ctx.get("workspaces");
+					if (workspaces === void 0) return void 0;
+					const items = workspaces.list.getSnapshot().items;
+					const match = items.find((item) => item.title === label
+						|| String(item.path ?? "").replace(/[/\\]+$/, "").split(/[/\\]/).pop() === label);
+					return match === void 0 ? void 0 : match.path;
+				},
+				openWorkspacePath: (path) => {
+					const workspaces = ctx.get("workspaces");
+					if (workspaces === void 0) return;
+					workspaces.openPath(path).catch(() => {
+						showDesktopToast("error", t("openWorkspace.error"));
+					});
+				}
+			}), "dsh-desktop-ui: chat context menu");
 			const connection = ctx.get("connection");
 			if (connection !== void 0 && connection.isLoopback) {
 				const documentController = new DesktopUiDocumentStore(connection.api);
