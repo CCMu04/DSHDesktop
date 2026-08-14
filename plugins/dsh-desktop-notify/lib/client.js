@@ -74,11 +74,40 @@ window.__ModuleLoader__.load({
     }
     /**
      * 安装完成提醒：订阅当前会话快照，running true→false 且窗口不在前台时
-     * 弹系统通知。返回 disposer。
+     * 弹系统通知。sessions 服务未就绪时延迟重试（客户端插件可能先于核心
+     * 服务 apply）。返回 disposer。
      */
     function installCompletionNotify(ctx, t) {
-      const sessions = ctx.get("sessions");
-      if (sessions === void 0) return () => {};
+      /** sessions 服务就绪前的重试上限与间隔。 */
+      const ddnMaxRetries = 20;
+      const ddnRetryDelayMs = 500;
+
+      let disposed = false;
+      let retries = 0;
+      let teardown = null;
+
+      const start = () => {
+        const sessions = ctx.get("sessions");
+        if (sessions === void 0) {
+          if (!disposed && retries < ddnMaxRetries) {
+            retries++;
+            setTimeout(start, ddnRetryDelayMs);
+          }
+          return;
+        }
+        teardown = watchCompletion(sessions, t);
+      };
+
+      start();
+
+      return () => {
+        disposed = true;
+        if (teardown !== null) teardown();
+      };
+    }
+
+    /** 在已就绪的 sessions 服务上安装完成提醒；返回 disposer。 */
+    function watchCompletion(sessions, t) {
       // 通知权限：Electron 默认自动批准；显式请求一次以防受限环境。
       if (
         typeof Notification !== "undefined" &&
