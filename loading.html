@@ -17,6 +17,12 @@
         background: #f7f8fa;
         color: #16181d;
       }
+      .titlebar-drag {
+        position: fixed;
+        inset: 0 150px auto 0;
+        height: 38px;
+        -webkit-app-region: drag;
+      }
       main { text-align: center; }
       img { width: 64px; height: 64px; }
       h1 { margin: 20px 0 8px; font-size: 22px; font-weight: 650; }
@@ -40,6 +46,7 @@
     </style>
   </head>
   <body>
+    <div class="titlebar-drag" aria-hidden="true"></div>
     <main>
       <img src="assets/favicon.svg" alt="" />
       <h1>DeepSeek Harness</h1>

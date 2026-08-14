@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.1.0-rc.6.5.1 — 2026-08-14
+
+Follow-up to the rc.6.5 preview: window dragging is back without blocking the session header.
+
+### Fixed
+
+- Make the session header the window drag surface, with its buttons opted out via `no-drag`, so
+  the session breadcrumbs and the header actions (jobs, subagents, session-log export) stay
+  clickable while the window can still be dragged by the header's empty areas. The loading
+  screen keeps its own drag strip.
+
 ## v0.1.0-rc.6.5 — 2026-08-14
 
 Desktop integration preview, still bundling unmodified DeepSeek Harness

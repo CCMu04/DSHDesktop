@@ -362,6 +362,34 @@ function configureNavigation(window) {
     event.preventDefault()
     void shell.openExternal(url)
   })
+
+  // The session header is the window drag surface: its empty areas (top
+  // padding, title-row gaps, tab spacing) drag the window, while buttons and
+  // other interactive elements inside it opt out via no-drag and stay fully
+  // clickable. Scoped to the conversation root's own header so headers of
+  // dialogs or panels never become drag regions.
+  window.webContents.on('did-finish-load', () => {
+    if (!isBackendUrl(window.webContents.getURL())) return
+    void window.webContents.executeJavaScript(`
+      if (!document.getElementById('dsh-desktop-drag-style')) {
+        const dragStyle = document.createElement('style')
+        dragStyle.id = 'dsh-desktop-drag-style'
+        dragStyle.textContent = [
+          '[data-phase] > header { -webkit-app-region: drag; }',
+          '[data-phase] > header button, [data-phase] > header input,',
+          '[data-phase] > header select, [data-phase] > header textarea,',
+          '[data-phase] > header a, [data-phase] > header [role="tab"],',
+          '[data-phase] > header [role="button"], [data-phase] > header [role="menuitem"],',
+          '[data-phase] > header [role="listbox"], [data-phase] > header [role="menu"],',
+          '[data-phase] > header [role="dialog"], [data-phase] > header [contenteditable="true"],',
+          '[data-phase] > header label, [data-phase] > header summary {',
+          '  -webkit-app-region: no-drag;',
+          '}',
+        ].join('\\n')
+        document.documentElement.appendChild(dragStyle)
+      }
+    `)
+  })
 }
 
 async function createWindow() {
