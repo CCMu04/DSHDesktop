@@ -105,6 +105,12 @@ npm run dist:offline
 - 非本地链接交给系统默认浏览器打开。
 - 不上传、不迁移用户的 DSH 配置、会话、凭据与插件。
 
+## 相关文档
+
+- [docs/PLUGINS.md](docs/PLUGINS.md)：内置插件规范与工作流（目录结构、宿主端 / 客户端契约、部署与生命周期、测试与发布）
+- [docs/TEMPLATES.md](docs/TEMPLATES.md)：文档格式模板
+- [CHANGELOG.md](CHANGELOG.md)：全部版本变更记录
+
 ## 声明
 
 本项目是社区维护的非官方桌面封装，与 DeepSeek 无隶属或背书关系。"DeepSeek"、"DeepSeek Harness" 及相关标识归其权利人所有。官方 DSH 使用 MIT License，详见[上游项目](https://github.com/deepseek-ai/deepseek-harness)与[第三方声明](THIRD_PARTY_NOTICES.md)。
