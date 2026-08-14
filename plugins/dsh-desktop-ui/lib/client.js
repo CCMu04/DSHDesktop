@@ -42,11 +42,11 @@ window.__ModuleLoader__.load({
 		/**
 		* Close-animation shim: the shipped settings root unmounts the panel
 		* instantly on close and CSS cannot animate an unmounted element. This shim
-		* intercepts every close path (close button, mask/outside click, Escape) in
-		* the capture phase, plays the slide-out animation, then completes the close
-		* through the shipped handlers (re-dispatching the original event, a
-		* synthetic click on the mask, or the Escape key). The panel's structural
-		* layout mirrors the shipped SettingsPanel DOM.
+		* intercepts the real close paths (close button, a genuine mask click, and
+		* Escape) in the capture phase, plays the slide-out animation, then
+		* completes the close through the shipped handlers (re-dispatching the
+		* original event, a synthetic click on the mask, or the Escape key). The
+		* panel's structural layout mirrors the shipped SettingsPanel DOM.
 		*/
 		function installSettingsDrawerShim() {
 			const panelSelector = 'div[role="presentation"] > div[role="dialog"][aria-modal="true"][aria-labelledby]';
@@ -108,6 +108,13 @@ window.__ModuleLoader__.load({
 				}
 				const openPanel = document.querySelector(panelSelector);
 				if (openPanel === null) return;
+				const overlay = openPanel.parentElement;
+				const mask = overlay === null ? void 0 : overlay.children[0];
+				// Only genuine mask clicks close the drawer. Clicks on portaled
+				// UI rendered above the mask (dropdown popups, preset view
+				// dialogs, ...) must reach their own handlers, not close the
+				// settings page.
+				if (mask === void 0 || event.target !== mask) return;
 				event.stopImmediatePropagation();
 				playClose(openPanel, event, "outside");
 			};
