@@ -5,6 +5,11 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing tag to publish (leave empty for build-only)
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -28,7 +33,7 @@ jobs:
       - if: matrix.arch == 'ia32'
         run: npm run prepare:node-pty-ia32
       - run: npm run prepare:runtime
-      - run: npx electron-builder --win nsis portable --${{ matrix.arch }}
+      - run: npx electron-builder --win nsis portable --${{ matrix.arch }} --publish never
       - name: Save ${{ matrix.arch }} assets
         uses: actions/upload-artifact@v4
         with:
@@ -58,17 +63,19 @@ jobs:
             throw "Expected four release assets, found $($assets.Count)."
           }
       - name: Publish preview assets
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         shell: pwsh
         run: |
+          $tag = if ($env:RELEASE_TAG) { $env:RELEASE_TAG } else { $env:GITHUB_REF_NAME }
           $assets = Get-ChildItem -LiteralPath dist -File |
             Where-Object Name -Match '^DSH-Desktop-(Setup|Portable)-.+-(x64|ia32)\.exe$' |
             Select-Object -ExpandProperty FullName
-          gh release create $env:GITHUB_REF_NAME @assets `
+          gh release create $tag @assets `
             --repo $env:GITHUB_REPOSITORY `
-            --title "DSH Desktop $env:GITHUB_REF_NAME" `
+            --title "DSH Desktop $tag" `
             --notes-file RELEASE_NOTES.md `
             --prerelease `
             --verify-tag
