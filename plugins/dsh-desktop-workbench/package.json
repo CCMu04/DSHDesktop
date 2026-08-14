@@ -1,0 +1,27 @@
+{
+  "name": "dsh-desktop-workbench",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Desktop workbench framework: right-side dock container, the desktop.workbench tab/viewer registry service, and per-session layout persistence.",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-primitives"
+      ]
+    }
+  }
+}
