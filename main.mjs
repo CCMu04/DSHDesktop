@@ -18,12 +18,17 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, Menu, shell } from 'electron'
+import { ensureBundledPlugin } from './builtin-plugin.mjs'
+import { installNativeOpenBridge } from './native-open-bridge.mjs'
 import { prepareDesktopToolchain } from './toolchain.mjs'
 
 const shellDirectory = path.dirname(fileURLToPath(import.meta.url))
 const runtimePreloadPath = app.isPackaged
   ? path.join(process.resourcesPath, 'runtime-preload.cjs')
   : path.join(shellDirectory, 'runtime-preload.cjs')
+const bundledPluginDirectory = app.isPackaged
+  ? path.join(process.resourcesPath, 'plugins', 'dsh-desktop-ui')
+  : path.join(shellDirectory, 'plugins', 'dsh-desktop-ui')
 const backendHost = '127.0.0.1'
 const startupTimeoutMs = 60_000
 
@@ -112,18 +117,18 @@ function migrateLegacyDshHome(sharedDshHome) {
 }
 
 function getRuntimeDirectory() {
-  return runtimeDirectory ?? path.resolve(shellDirectory, '..', 'dsh-runtime')
+  return runtimeDirectory ?? path.join(shellDirectory, 'node_modules', '@deepseek-ai', 'dsh')
 }
 
-function runProcess(command, args) {
+function runProcess(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { windowsHide: true })
+    const child = spawn(command, args, { ...options, windowsHide: true })
     child.stdout.on('data', appendBackendOutput)
     child.stderr.on('data', appendBackendOutput)
     child.once('error', reject)
     child.once('exit', code => {
       if (code === 0) resolve()
-      else reject(new Error(`Runtime extraction exited with code ${code}.`))
+      else reject(new Error(`Desktop preparation command exited with code ${code}.`))
     })
   })
 }
@@ -182,7 +187,7 @@ async function preparePackagedRuntime() {
       'utf8',
     )
 
-    await runProcess(path.join(resourceDirectory, '7za.exe'), [
+    await runProcess(path.join(resourceDirectory, `7za-${process.arch}.exe`), [
       'x',
       archivePath,
       `@${extractionListPath}`,
@@ -254,7 +259,7 @@ async function waitForBackend(url) {
   throw new Error('The local Web service did not become ready within 60 seconds.')
 }
 
-function startBackend(port) {
+function prepareBackendContext() {
   const selectedRuntimeDirectory = getRuntimeDirectory()
   const entry = path.join(selectedRuntimeDirectory, 'lib', 'bin.js')
   if (!existsSync(entry)) {
@@ -264,31 +269,54 @@ function startBackend(port) {
   const dshHome = resolveSharedDshHome()
   mkdirSync(dshHome, { recursive: true })
   migrateLegacyDshHome(dshHome)
-  app.setAppLogsPath()
-  const logStream = createWriteStream(path.join(app.getPath('logs'), 'backend.log'), { flags: 'a' })
-  const requireFromRuntime = createRequire(path.join(selectedRuntimeDirectory, 'package.json'))
-  const nodePty = requireFromRuntime('node-pty')
-  const { environment } = prepareDesktopToolchain({
+  const toolchain = prepareDesktopToolchain({
     userDataDirectory: app.getPath('userData'),
     runtimeDirectory: selectedRuntimeDirectory,
     executablePath: process.execPath,
     preloadPath: runtimePreloadPath,
     dshHome,
   })
+  return { selectedRuntimeDirectory, dshHome, ...toolchain }
+}
+
+async function prepareBundledPlugins(context) {
+  await ensureBundledPlugin({
+    sourceDirectory: bundledPluginDirectory,
+    userDataDirectory: app.getPath('userData'),
+    dshHome: context.dshHome,
+    packageName: 'dsh-desktop-ui',
+    install: targetDirectory => runProcess(
+      process.execPath,
+      [
+        '--require', runtimePreloadPath,
+        '--expose-internals', context.dshEntry,
+        'plugin', '--profile', 'web',
+        'add', '--offline', `link:${targetDirectory.replaceAll('\\', '/')}`,
+      ],
+      { cwd: os.homedir(), env: context.environment },
+    ),
+  })
+}
+
+function startBackend(port, context) {
+  app.setAppLogsPath()
+  const logStream = createWriteStream(path.join(app.getPath('logs'), 'backend.log'), { flags: 'a' })
+  const requireFromRuntime = createRequire(path.join(context.selectedRuntimeDirectory, 'package.json'))
+  const nodePty = requireFromRuntime('node-pty')
 
   backendExitCode = null
   backendProcess = nodePty.spawn(
     process.execPath,
     [
       '--require', runtimePreloadPath,
-      '--expose-internals', entry, 'web', '--port', String(port),
+      '--expose-internals', context.dshEntry, 'web', '--port', String(port),
     ],
     {
       name: 'xterm-color',
       cols: 120,
       rows: 30,
       cwd: os.homedir(),
-      env: environment,
+      env: context.environment,
     },
   )
 
@@ -375,9 +403,20 @@ async function createWindow() {
 async function launch() {
   await createWindow()
   await preparePackagedRuntime()
+  const context = prepareBackendContext()
+  await setLoadingStatus('正在准备内置桌面插件…')
+  await prepareBundledPlugins(context)
+  await setLoadingStatus('正在启动本地服务…')
   const port = await reservePort()
   backendOrigin = `http://${backendHost}:${port}`
-  startBackend(port)
+  installNativeOpenBridge({
+    webRequest: mainWindow.webContents.session.webRequest,
+    backendOrigin,
+    settingsPath: path.join(context.dshHome, 'settings.yaml'),
+    openPath: target => shell.openPath(target),
+    reportError: appendBackendOutput,
+  })
+  startBackend(port, context)
   await waitForBackend(`${backendOrigin}/`)
   await mainWindow.loadURL(`${backendOrigin}/`)
 }

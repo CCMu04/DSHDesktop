@@ -9,6 +9,8 @@
 
 ![DSH Desktop 主界面](docs/images/dsh-desktop.png)
 
+![DSH Desktop 内置 desktop-ui 插件已启用](docs/images/dsh-desktop-plugin.jpg)
+
 ## 为什么做这个项目
 
 DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中启动和管理服务。DSH Desktop
@@ -26,16 +28,23 @@ DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中�
   包；相同版本不会重复解压。
 - **跟随官方版本**：构建命令会查询 npm 上最新的 DSH 及配套组件，Dependabot 也会每周检查更新。
 - **桌面体验优化**：原生窗口、简洁标题栏、合理的初始尺寸、单实例运行和外部链接安全打开。
+- **可靠的原生打开**：配置文件与工作区目录由 Electron 主进程交给 Windows，避免后端 Node 环境
+  污染 VS Code 等 Electron 应用，也兼容 x64 与 ia32 桌面进程。
+- **内置 desktop-ui**：首次使用或内置插件版本更新后的首次启动会安装并默认启用一次；此后不再
+  修复或强制启用，用户的停用、启用或移除选择始终优先。
 - **本地优先**：Web 服务只监听随机的本机回环端口，不对局域网暴露。
 
 ## 下载与安装
 
 前往 [Releases](https://github.com/CCMu04/DSHDesktop/releases) 下载：
 
-- [`DSH-Desktop-Setup-0.1.0-rc.6.4.exe`](https://github.com/CCMu04/DSHDesktop/releases/download/v0.1.0-rc.6.4/DSH-Desktop-Setup-0.1.0-rc.6.4.exe)：推荐，标准 Windows 安装包。
-- [`DSH-Desktop-Portable-0.1.0-rc.6.4.exe`](https://github.com/CCMu04/DSHDesktop/releases/download/v0.1.0-rc.6.4/DSH-Desktop-Portable-0.1.0-rc.6.4.exe)：免安装便携版。
+- [`DSH-Desktop-Setup-0.1.0-rc.6.5-x64.exe`](https://github.com/CCMu04/DSHDesktop/releases/download/v0.1.0-rc.6.5/DSH-Desktop-Setup-0.1.0-rc.6.5-x64.exe)：推荐，64 位标准安装包。
+- [`DSH-Desktop-Portable-0.1.0-rc.6.5-x64.exe`](https://github.com/CCMu04/DSHDesktop/releases/download/v0.1.0-rc.6.5/DSH-Desktop-Portable-0.1.0-rc.6.5-x64.exe)：64 位免安装版。
+- [`DSH-Desktop-Setup-0.1.0-rc.6.5-ia32.exe`](https://github.com/CCMu04/DSHDesktop/releases/download/v0.1.0-rc.6.5/DSH-Desktop-Setup-0.1.0-rc.6.5-ia32.exe)：32 位标准安装包。
+- [`DSH-Desktop-Portable-0.1.0-rc.6.5-ia32.exe`](https://github.com/CCMu04/DSHDesktop/releases/download/v0.1.0-rc.6.5/DSH-Desktop-Portable-0.1.0-rc.6.5-ia32.exe)：32 位免安装版。
 
-支持 Windows 10/11 x64。首次启动需要展开约 300 MB 的官方运行组件，因此会比后续启动稍慢。
+支持 Windows 10/11 x64，并为 32 位 Windows 10 提供 ia32 构建；64 位 Windows 也可运行 ia32
+构建。首次启动需要展开约 300 MB 的官方运行组件，因此会比后续启动稍慢。
 
 ## 与原生 DSH 的数据关系
 
@@ -48,6 +57,10 @@ DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中�
 `~/.dsh/plugins`（或自己的项目目录）；Web Profile 的安装记录位于 `~/.dsh/profiles/web`。
 这些目录都不属于桌面端可替换的运行时缓存。
 
+内置 `desktop-ui` 的部署副本保存在应用数据目录，不覆盖 `~/.dsh/plugins` 中的同名开发目录。
+桌面端按 DSH Home 和内置插件内容指纹记录一次性启用状态：首次部署或内置内容变化时通过官方
+`dsh plugin` 命令安装并启用；指纹不变时，即使用户随后停用或移除，也不会再次干预。
+
 ## 更新机制
 
 应用不会在每次启动时强制联网更新。发布新版时：
@@ -58,7 +71,8 @@ DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中�
 
 ## 本地构建
 
-要求 Windows 10/11、Node.js 22+ 和 npm：
+构建 x64 与 ia32 完整发布矩阵要求 Windows 10/11、Node.js 24、npm，以及带 C++ 桌面开发
+工作负载的 Visual Studio 2022（用于从上游 `node-pty` 源码生成 ia32 原生模块）：
 
 ```powershell
 git clone https://github.com/CCMu04/DSHDesktop.git
@@ -74,11 +88,22 @@ npm ci
 npm run dist:offline
 ```
 
+只需在 64 位 Windows 上离线重建 x64 包时，可运行：
+
+```powershell
+npm ci
+npm run dist:x64:offline
+```
+
 ## 工作原理
 
 桌面壳启动官方 DSH Web 服务并将其加载到隔离的 Electron 窗口。后端运行在无界面的 ConPTY
 会话中；桌面兼容层只调整 Windows 进程的窗口显示状态，不取消控制台，也不绕过 DSH 的 ACL
 沙箱。官方包在磁盘上保持原样。
+
+设置页的配置文件打开请求与目录打开请求仍先交给官方 Host 校验和处理；请求完成后，桌面壳再由
+Electron 主进程执行一次 Windows 原生打开。这一适配避开后端必须携带的
+`ELECTRON_RUN_AS_NODE`/`NODE_OPTIONS`，不会修改官方 Host 或 Web UI 源码。
 
 ## 安全与隐私
 

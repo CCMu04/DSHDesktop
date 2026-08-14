@@ -1,0 +1,5 @@
+# dsh-desktop-ui bundle patch: mount the plugin row that moves the
+# Session-log export button into the header action row.
+- insert:
+    - id: dsh-desktop-ui
+      name: dsh-desktop-ui
