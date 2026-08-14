@@ -102,9 +102,15 @@
 ## 验证
 
 - <自动化测试与冒烟验证结果>
+
+## 相关文档
+
+- [README.md](https://github.com/CCMu04/DSHDesktop/blob/main/README.md)：项目介绍、下载安装与构建说明
+- [CHANGELOG.md](https://github.com/CCMu04/DSHDesktop/blob/main/CHANGELOG.md)：全部版本变更记录
+- [docs/TEMPLATES.md](https://github.com/CCMu04/DSHDesktop/blob/main/docs/TEMPLATES.md)：文档格式模板
 ````
 
-该文件会原文作为 GitHub Release 备注发布，只写与当前版本相关的内容。
+该文件会原文作为 GitHub Release 备注发布，只写与当前版本相关的内容；「相关文档」小节保持固定不变。
 
 ## THIRD_PARTY_NOTICES.md 模板
 
