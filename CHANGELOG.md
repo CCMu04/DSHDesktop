@@ -17,6 +17,14 @@ Desktop UI polish: open a workspace folder from the sidebar.
   environment from the backend preload; the Electron mirror previously opened each folder a
   second time for page-initiated requests.
 
+### Fixed
+
+- Disable the header drag surface while an `aria-modal` dialog is open (settings drawer,
+  session-export dialog, ...). Electron hit-tests drag regions at the window level, so an
+  overlay above the header used to swallow clicks as window dragging - the settings drawer's
+  top row (title, actions, close button) landed inside the header's rect and could not be
+  clicked. The drag surface returns as soon as the dialog closes.
+
 ## v0.1.0-rc.6.5.1 — 2026-08-14
 
 Follow-up to the rc.6.5 preview: window dragging is back without blocking the session header.

@@ -369,6 +369,13 @@ function configureNavigation(window) {
   // (display: contents), so the header is matched through that anchor, and
   // the scope stays limited to the conversation header so headers of dialogs
   // or panels never become drag regions.
+  //
+  // Electron hit-tests drag regions at the window level (WM_NCHITTEST), so
+  // any overlay above the header - such as the left-docked settings drawer
+  // whose top row lands inside the header's rect - swallows clicks as window
+  // dragging. While an aria-modal dialog is open the drag surface is
+  // disabled, so the dialog's own header row stays fully clickable, and it
+  // is restored when the dialog closes.
   window.webContents.on('did-finish-load', () => {
     if (!isBackendUrl(window.webContents.getURL())) return
     void window.webContents.executeJavaScript(`
@@ -395,6 +402,18 @@ function configureNavigation(window) {
           '}',
         ].join('\\n')
         document.documentElement.appendChild(dragStyle)
+        let dragSyncPending = false
+        const syncDragRegion = () => {
+          if (dragSyncPending) return
+          dragSyncPending = true
+          queueMicrotask(() => {
+            dragSyncPending = false
+            dragStyle.disabled = document.querySelector('[role="dialog"][aria-modal="true"]') !== null
+          })
+        }
+        const dragObserver = new MutationObserver(syncDragRegion)
+        dragObserver.observe(document.documentElement, { childList: true, subtree: true })
+        syncDragRegion()
       }
     `)
   })

@@ -14,6 +14,9 @@ Follow-up to the v0.1.0-rc.6.5.1 preview: right-click a workspace in the sidebar
   opener alone (its `Invoke-Item` subprocesses get a clean environment from the backend
   preload), which also removes a second Explorer window that the Electron mirror used to open
   for page-initiated requests.
+- The header drag surface is disabled while a modal dialog is open (settings drawer,
+  session-export dialog), so the dialog's own top row stays fully clickable; dragging returns
+  as soon as the dialog closes.
 - Everything from v0.1.0-rc.6.5.1 is unchanged: window dragging via the session header,
   bundled Node.js 24 runtime, `desktop-ui`, and the x64-only installer.
 
