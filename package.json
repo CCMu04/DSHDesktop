@@ -95,10 +95,6 @@
         "to": "runtime/7za-x64.exe"
       },
       {
-        "from": "node_modules/7zip-bin/win/ia32/7za.exe",
-        "to": "runtime/7za-ia32.exe"
-      },
-      {
         "from": "plugins/dsh-desktop-ui",
         "to": "plugins/dsh-desktop-ui"
       }

@@ -16,12 +16,8 @@ permissions:
 
 jobs:
   build:
-    name: build (${{ matrix.arch }})
+    name: build (x64)
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [x64, ia32]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,17 +26,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - if: matrix.arch == 'ia32'
-        run: npm run prepare:node-pty-ia32
       - run: npm run prepare:runtime
-      - run: npx electron-builder --win nsis portable --${{ matrix.arch }} --publish never
-      - name: Save ${{ matrix.arch }} assets
+      - run: npm run prepare:node
+      - run: npx electron-builder --win nsis portable --x64 --publish never
+      - name: Save x64 assets
         uses: actions/upload-artifact@v4
         with:
-          name: DSH-Desktop-${{ github.run_id }}-${{ matrix.arch }}
+          name: DSH-Desktop-${{ github.run_id }}-x64
           path: |
-            dist/DSH-Desktop-Setup-*-${{ matrix.arch }}.exe
-            dist/DSH-Desktop-Portable-*-${{ matrix.arch }}.exe
+            dist/DSH-Desktop-Setup-*-x64.exe
+            dist/DSH-Desktop-Portable-*-x64.exe
           if-no-files-found: error
 
   publish:
@@ -58,9 +53,9 @@ jobs:
         shell: pwsh
         run: |
           $assets = Get-ChildItem -LiteralPath dist -File |
-            Where-Object Name -Match '^DSH-Desktop-(Setup|Portable)-.+-(x64|ia32)\.exe$'
-          if ($assets.Count -ne 4) {
-            throw "Expected four release assets, found $($assets.Count)."
+            Where-Object Name -Match '^DSH-Desktop-(Setup|Portable)-.+-x64\.exe$'
+          if ($assets.Count -ne 2) {
+            throw "Expected two release assets, found $($assets.Count)."
           }
       - name: Publish preview assets
         if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
@@ -71,7 +66,7 @@ jobs:
         run: |
           $tag = if ($env:RELEASE_TAG) { $env:RELEASE_TAG } else { $env:GITHUB_REF_NAME }
           $assets = Get-ChildItem -LiteralPath dist -File |
-            Where-Object Name -Match '^DSH-Desktop-(Setup|Portable)-.+-(x64|ia32)\.exe$' |
+            Where-Object Name -Match '^DSH-Desktop-(Setup|Portable)-.+-x64\.exe$' |
             Select-Object -ExpandProperty FullName
           gh release create $tag @assets `
             --repo $env:GITHUB_REPOSITORY `

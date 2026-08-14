@@ -2,7 +2,7 @@
 
 ## v0.1.0-rc.6.5 — 2026-08-14
 
-Desktop integration and 32-bit compatibility preview, still bundling unmodified DeepSeek Harness
+Desktop integration preview, still bundling unmodified DeepSeek Harness
 `0.1.0-rc.6`.
 
 ![Bundled desktop-ui plugin enabled](https://raw.githubusercontent.com/CCMu04/DSHDesktop/v0.1.0-rc.6.5/docs/images/dsh-desktop-plugin.jpg)
