@@ -362,27 +362,6 @@ function configureNavigation(window) {
     event.preventDefault()
     void shell.openExternal(url)
   })
-
-  window.webContents.on('did-finish-load', () => {
-    if (!isBackendUrl(window.webContents.getURL())) return
-    void window.webContents.executeJavaScript(`
-      if (!document.getElementById('dsh-desktop-drag-region')) {
-        const dragRegion = document.createElement('div')
-        dragRegion.id = 'dsh-desktop-drag-region'
-        Object.assign(dragRegion.style, {
-          position: 'fixed',
-          top: '0',
-          left: '0',
-          right: '150px',
-          height: '34px',
-          zIndex: '2147483647',
-          pointerEvents: 'none',
-          WebkitAppRegion: 'drag',
-        })
-        document.documentElement.appendChild(dragRegion)
-      }
-    `)
-  })
 }
 
 async function createWindow() {
