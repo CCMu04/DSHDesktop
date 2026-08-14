@@ -11,7 +11,12 @@ permissions:
 
 jobs:
   build:
+    name: build (${{ matrix.arch }})
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, ia32]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,17 +25,38 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - run: npm run prepare:node-pty-ia32
+      - if: matrix.arch == 'ia32'
+        run: npm run prepare:node-pty-ia32
       - run: npm run prepare:runtime
-      - run: npx electron-builder --win nsis portable --x64 --ia32
-      - name: Save preview assets
+      - run: npx electron-builder --win nsis portable --${{ matrix.arch }}
+      - name: Save ${{ matrix.arch }} assets
         uses: actions/upload-artifact@v4
         with:
-          name: DSH-Desktop-${{ github.run_id }}
+          name: DSH-Desktop-${{ github.run_id }}-${{ matrix.arch }}
           path: |
-            dist/DSH-Desktop-Setup-*.exe
-            dist/DSH-Desktop-Portable-*.exe
+            dist/DSH-Desktop-Setup-*-${{ matrix.arch }}.exe
+            dist/DSH-Desktop-Portable-*-${{ matrix.arch }}.exe
           if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect preview assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: DSH-Desktop-${{ github.run_id }}-*
+          path: dist
+          merge-multiple: true
+      - name: Verify preview assets
+        shell: pwsh
+        run: |
+          $assets = Get-ChildItem -LiteralPath dist -File |
+            Where-Object Name -Match '^DSH-Desktop-(Setup|Portable)-.+-(x64|ia32)\.exe$'
+          if ($assets.Count -ne 4) {
+            throw "Expected four release assets, found $($assets.Count)."
+          }
       - name: Publish preview assets
         if: startsWith(github.ref, 'refs/tags/')
         env:
@@ -40,9 +66,6 @@ jobs:
           $assets = Get-ChildItem -LiteralPath dist -File |
             Where-Object Name -Match '^DSH-Desktop-(Setup|Portable)-.+-(x64|ia32)\.exe$' |
             Select-Object -ExpandProperty FullName
-          if ($assets.Count -ne 4) {
-            throw "Expected four release assets, found $($assets.Count)."
-          }
           gh release create $env:GITHUB_REF_NAME @assets `
             --repo $env:GITHUB_REPOSITORY `
             --title "DSH Desktop $env:GITHUB_REF_NAME" `
