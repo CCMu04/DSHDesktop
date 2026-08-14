@@ -366,8 +366,10 @@ function configureNavigation(window) {
   // The session header is the window drag surface: its empty areas (top
   // padding, title-row gaps, tab spacing) drag the window, while buttons and
   // other interactive elements inside it opt out via no-drag and stay fully
-  // clickable. Scoped to the conversation root's own header so headers of
-  // dialogs or panels never become drag regions.
+  // clickable. Every slot outlet wraps its content in a <div data-slot=...>
+  // (display: contents), so the header is matched through that anchor, and
+  // the scope stays limited to the conversation header so headers of dialogs
+  // or panels never become drag regions.
   window.webContents.on('did-finish-load', () => {
     if (!isBackendUrl(window.webContents.getURL())) return
     void window.webContents.executeJavaScript(`
@@ -375,14 +377,21 @@ function configureNavigation(window) {
         const dragStyle = document.createElement('style')
         dragStyle.id = 'dsh-desktop-drag-style'
         dragStyle.textContent = [
-          '[data-phase] > header { -webkit-app-region: drag; }',
-          '[data-phase] > header button, [data-phase] > header input,',
-          '[data-phase] > header select, [data-phase] > header textarea,',
-          '[data-phase] > header a, [data-phase] > header [role="tab"],',
-          '[data-phase] > header [role="button"], [data-phase] > header [role="menuitem"],',
-          '[data-phase] > header [role="listbox"], [data-phase] > header [role="menu"],',
-          '[data-phase] > header [role="dialog"], [data-phase] > header [contenteditable="true"],',
-          '[data-phase] > header label, [data-phase] > header summary {',
+          '[data-slot="conversation.session.header"] header { -webkit-app-region: drag; }',
+          '[data-slot="conversation.session.header"] header button,',
+          '[data-slot="conversation.session.header"] header input,',
+          '[data-slot="conversation.session.header"] header select,',
+          '[data-slot="conversation.session.header"] header textarea,',
+          '[data-slot="conversation.session.header"] header a,',
+          '[data-slot="conversation.session.header"] header [role="tab"],',
+          '[data-slot="conversation.session.header"] header [role="button"],',
+          '[data-slot="conversation.session.header"] header [role="menuitem"],',
+          '[data-slot="conversation.session.header"] header [role="listbox"],',
+          '[data-slot="conversation.session.header"] header [role="menu"],',
+          '[data-slot="conversation.session.header"] header [role="dialog"],',
+          '[data-slot="conversation.session.header"] header [contenteditable="true"],',
+          '[data-slot="conversation.session.header"] header label,',
+          '[data-slot="conversation.session.header"] header summary {',
           '  -webkit-app-region: no-drag;',
           '}',
         ].join('\\n')
