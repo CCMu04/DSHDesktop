@@ -1,0 +1,7 @@
+# dsh-desktop-features bundle patch: mounts the feature-group card row into
+# the web profile. The row is browser-only (the host half is empty); feature
+# plugins register their switch cards into the `desktop.features.item` child
+# slot declared by this group card.
+- insert:
+    - id: dsh-desktop-features
+      name: dsh-desktop-features

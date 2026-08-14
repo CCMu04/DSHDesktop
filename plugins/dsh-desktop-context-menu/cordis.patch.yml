@@ -1,0 +1,7 @@
+# dsh-desktop-context-menu bundle patch: mounts its plugin row into the web
+# profile. The single row carries BOTH halves: the host side (switch
+# persistence) and the browser side (right-click menus + feature card switch,
+# via the dsh.client declaration in package.json).
+- insert:
+    - id: dsh-desktop-context-menu
+      name: dsh-desktop-context-menu

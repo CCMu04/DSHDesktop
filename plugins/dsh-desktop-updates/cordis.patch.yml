@@ -1,0 +1,7 @@
+# dsh-desktop-updates bundle patch: mounts its plugin row into the web profile.
+# The single row carries BOTH halves: the host side (switch persistence +
+# current-version API) and the browser side (settings section + update dialog,
+# via the dsh.client declaration in package.json).
+- insert:
+    - id: dsh-desktop-updates
+      name: dsh-desktop-updates

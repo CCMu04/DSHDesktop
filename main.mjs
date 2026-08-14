@@ -24,9 +24,11 @@ const shellDirectory = path.dirname(fileURLToPath(import.meta.url))
 const runtimePreloadPath = app.isPackaged
   ? path.join(process.resourcesPath, 'runtime-preload.cjs')
   : path.join(shellDirectory, 'runtime-preload.cjs')
-const bundledPluginDirectory = app.isPackaged
-  ? path.join(process.resourcesPath, 'plugins', 'dsh-desktop-ui')
-  : path.join(shellDirectory, 'plugins', 'dsh-desktop-ui')
+// Root of the bundled plugins: every `dsh-desktop-*` subdirectory is one
+// independent plugin (each carries its own host/client halves and patch row).
+const bundledPluginsDirectory = app.isPackaged
+  ? path.join(process.resourcesPath, 'plugins')
+  : path.join(shellDirectory, 'plugins')
 // The DSH backend runs on the bundled stock Node.js, never on Electron-as-Node:
 // the official native directory picker (koffi) aborts fatally and node-pty
 // output goes silent under Electron's runtime. Unpackaged development keeps
@@ -281,26 +283,44 @@ function prepareBackendContext() {
     preloadPath: runtimePreloadPath,
     dshHome,
   })
+  // Tell the backend how this client was installed, so the update page can
+  // report it: portable builds carry PORTABLE_EXECUTABLE_DIR; packaged
+  // installs run from resourcesPath; anything else is an unpackaged dev run.
+  const installKind = process.env.PORTABLE_EXECUTABLE_DIR
+    ? 'portable'
+    : app.isPackaged
+      ? 'installer'
+      : 'dev'
+  toolchain.environment.DSH_DESKTOP_INSTALL_KIND = installKind
   return { selectedRuntimeDirectory, dshHome, ...toolchain }
 }
 
 async function prepareBundledPlugins(context) {
-  await ensureBundledPlugin({
-    sourceDirectory: bundledPluginDirectory,
-    userDataDirectory: app.getPath('userData'),
-    dshHome: context.dshHome,
-    packageName: 'dsh-desktop-ui',
-    install: targetDirectory => runProcess(
-      nodeExecutablePath,
-      [
-        '--require', runtimePreloadPath,
-        '--expose-internals', context.dshEntry,
-        'plugin', '--profile', 'web',
-        'add', '--offline', `link:${targetDirectory.replaceAll('\\', '/')}`,
-      ],
-      { cwd: os.homedir(), env: context.environment },
-    ),
-  })
+  // Every bundled plugin is its own directory under the plugins root; each
+  // keeps an independent fingerprint + install record (builtin-plugins.json
+  // keys by package name), so adding or removing a plugin never touches the
+  // others' enablement state.
+  const names = readdirSync(bundledPluginsDirectory)
+    .filter((name) => name.startsWith('dsh-desktop-'))
+    .sort()
+  for (const packageName of names) {
+    await ensureBundledPlugin({
+      sourceDirectory: path.join(bundledPluginsDirectory, packageName),
+      userDataDirectory: app.getPath('userData'),
+      dshHome: context.dshHome,
+      packageName,
+      install: targetDirectory => runProcess(
+        nodeExecutablePath,
+        [
+          '--require', runtimePreloadPath,
+          '--expose-internals', context.dshEntry,
+          'plugin', '--profile', 'web',
+          'add', '--offline', `link:${targetDirectory.replaceAll('\\', '/')}`,
+        ],
+        { cwd: os.homedir(), env: context.environment },
+      ),
+    })
+  }
 }
 
 function startBackend(port, context) {

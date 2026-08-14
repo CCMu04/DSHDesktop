@@ -51,10 +51,36 @@ if (installedManifest.version !== latestDshVersion) {
   )
 }
 
+/**
+ * Desktop-shell patch version: <official DSH version>.<major>.<minor>.
+ * The patch line is owned by the shell's release history (e.g. the 6.5.x
+ * series) and only ever advances: each `dist` bumps minor, keeping the
+ * maintainer's line continuous across DSH upgrades.
+ * Examples: 0.1.0-rc.6.5.3 → 0.1.0-rc.6.5.4 → ... → (DSH rc.7) 0.1.0-rc.7.5.5
+ * @param currentVersion - the shell version before this sync.
+ * @param latestDshVersion - the official DSH version this build follows.
+ */
+function nextDesktopVersion(currentVersion, latestDshVersion) {
+  if (typeof currentVersion === 'string') {
+    // The patch number is the last two dot-separated numeric segments,
+    // regardless of the official prefix (which may itself contain digits).
+    const segments = currentVersion.split('.')
+    const major = Number.parseInt(segments[segments.length - 2] ?? '', 10)
+    const minor = Number.parseInt(segments[segments.length - 1] ?? '', 10)
+    if (Number.isInteger(major) && major >= 1 && Number.isInteger(minor)) {
+      return `${latestDshVersion}.${major}.${minor + 1}`
+    }
+  }
+  // No patch number on the current version: keep the bare official version.
+  // The shell patch line is maintained manually, so we never invent a number.
+  return latestDshVersion
+}
+
 runNpm([
   'version',
-  latestDshVersion,
+  nextDesktopVersion(manifest.version, latestDshVersion),
   '--no-git-tag-version',
   '--allow-same-version',
 ])
-console.log(`Desktop package version is now ${latestDshVersion}.`)
+const syncedManifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+console.log(`Desktop package version is now ${syncedManifest.version}.`)

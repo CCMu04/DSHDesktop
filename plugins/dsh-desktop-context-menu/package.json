@@ -1,0 +1,28 @@
+{
+  "name": "dsh-desktop-context-menu",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Feature enhancement: context menu — right-click menus for inputs (cut/copy/paste/select-all), workspaces (open in Explorer) and selections (copy). Host half serves the switch config.",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  }
+}

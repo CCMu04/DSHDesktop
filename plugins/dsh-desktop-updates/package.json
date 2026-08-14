@@ -1,0 +1,28 @@
+{
+  "name": "dsh-desktop-updates",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Desktop feature: check for DSH Desktop updates — version info in settings, manual update check, download prompt. Host half serves the switch config and the current shell version.",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  }
+}

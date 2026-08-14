@@ -1,0 +1,28 @@
+{
+  "name": "dsh-desktop-features",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Feature-enhancement group card: aggregates every feature plugin's switch card under one 「功能增强」 entry in the plugin configuration page.",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  }
+}

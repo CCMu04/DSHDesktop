@@ -1,6 +1,6 @@
 {
   "name": "deepseek-harness-desktop",
-  "version": "0.1.0-rc.6.5.3",
+  "version": "0.1.0-rc.6.5.7",
   "description": "Unofficial Windows desktop shell for the unmodified DeepSeek Harness Web UI",
   "author": "CCMu04",
   "license": "MIT",
@@ -15,13 +15,15 @@
   "main": "main.mjs",
   "scripts": {
     "test": "node --test test/*.test.mjs test/*.test.cjs",
+    "prestart": "node scripts/write-plugin-version.mjs",
     "start": "electron .",
     "sync:dsh": "node scripts/sync-dsh.mjs",
     "prepare:node": "node scripts/prepare-node-runtime.mjs",
     "prepare:runtime": "node scripts/prepare-runtime.mjs",
-    "dist": "npm run sync:dsh && npm run prepare:runtime && npm run prepare:node && electron-builder --win nsis portable --x64",
+    "dist": "npm run sync:dsh && node scripts/write-plugin-version.mjs && npm run prepare:runtime && npm run prepare:node && electron-builder --win nsis portable --x64",
     "dist:offline": "npm run prepare:runtime && npm run prepare:node && electron-builder --win nsis portable --x64",
-    "dist:x64:offline": "npm run dist:offline"
+    "dist:x64:offline": "npm run dist:offline",
+    "format": "prettier --write main.mjs builtin-plugin.mjs toolchain.mjs runtime-preload.cjs scripts/*.mjs test/*.mjs test/*.cjs plugins/dsh-desktop-ui/lib/*.js"
   },
   "dependencies": {
     "@deepseek-ai/cordis-plugin-group": "1.0.1",
@@ -52,7 +54,8 @@
     "7zip-bin": "5.2.0",
     "electron": "43.4.0",
     "electron-builder": "26.15.3",
-    "node-gyp": "12.4.0"
+    "node-gyp": "12.4.0",
+    "prettier": "^3.9.6"
   },
   "build": {
     "appId": "ai.deepseek.harness.desktop",
@@ -95,8 +98,8 @@
         "to": "runtime/7za-x64.exe"
       },
       {
-        "from": "plugins/dsh-desktop-ui",
-        "to": "plugins/dsh-desktop-ui"
+        "from": "plugins",
+        "to": "plugins"
       }
     ],
     "win": {
