@@ -39,6 +39,11 @@ const nodeExecutablePath = app.isPackaged
 const backendHost = '127.0.0.1'
 const startupTimeoutMs = 60_000
 
+// Windows toasts (HTML5 Notification → system notifications) are attributed
+// through the AppUserModelID: without it Electron falls back to a generic
+// identity and the notification may not surface under the app's name/icon.
+app.setAppUserModelId('ai.deepseek.harness.desktop')
+
 let backendProcess
 let backendExitCode = null
 let backendOrigin

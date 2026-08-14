@@ -1,0 +1,7 @@
+# dsh-desktop-notify bundle patch: mounts its plugin row into the web
+# profile. The single row carries BOTH halves: the host side (switch
+# persistence) and the browser side (completion reminder + feature card
+# switch, via the dsh.client declaration in package.json).
+- insert:
+    - id: dsh-desktop-notify
+      name: dsh-desktop-notify

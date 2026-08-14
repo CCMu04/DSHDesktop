@@ -36,12 +36,13 @@ DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中�
 
 因此将来安装官方 DSH 后，可以继续使用已有设置、会话和插件。用户创建的插件应放在 `~/.dsh/plugins`（或自己的项目目录）；Web Profile 的安装记录位于 `~/.dsh/profiles/web`。这些目录都不属于桌面端可替换的运行时缓存。
 
-内置插件采用多插件结构：`plugins/` 下的每个 `dsh-desktop-*` 目录都是一个独立插件（各自携带 host/client 两半与 patch 行），启动时逐个按内容指纹部署并注册。目前内置四个插件：
+内置插件采用多插件结构：`plugins/` 下的每个 `dsh-desktop-*` 目录都是一个独立插件（各自携带 host/client 两半与 patch 行），启动时逐个按内容指纹部署并注册。目前内置五个插件：
 
 - `dsh-desktop-ui` — **视觉增强**（见下）
 - `dsh-desktop-features` — **功能增强**聚合卡片（插件配置页中的分组入口，各功能插件把开关注册进它的子槽位）
 - `dsh-desktop-updates` — **功能增强：检查更新**
 - `dsh-desktop-context-menu` — **功能增强：右键菜单**
+- `dsh-desktop-notify` — **功能增强：完成提醒**
 
 ### 视觉增强开关（dsh-desktop-ui）
 
@@ -63,6 +64,7 @@ DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中�
 | --- | --- | --- |
 | 检查更新 | dsh-desktop-updates | 「设置 > 检查更新」显示当前版本，手动检查 GitHub Releases，有新版本时弹窗选择「前往下载」或「暂不」 |
 | 右键菜单 | dsh-desktop-context-menu | 右键输入框剪切 / 复制 / 粘贴 / 全选；右键工作区打开所在文件夹；右键选中内容直接复制 |
+| 完成提醒 | dsh-desktop-notify | 回复完成且应用窗口不在前台时，在右下角弹出系统通知；点击通知回到应用 |
 
 ## 更新机制
 
