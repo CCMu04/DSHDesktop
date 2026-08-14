@@ -12,7 +12,6 @@ import {
   writeFileSync,
 } from 'node:fs'
 import http from 'node:http'
-import { createRequire } from 'node:module'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -29,6 +28,13 @@ const runtimePreloadPath = app.isPackaged
 const bundledPluginDirectory = app.isPackaged
   ? path.join(process.resourcesPath, 'plugins', 'dsh-desktop-ui')
   : path.join(shellDirectory, 'plugins', 'dsh-desktop-ui')
+// The DSH backend runs on the bundled stock Node.js, never on Electron-as-Node:
+// the official native directory picker (koffi) aborts fatally and node-pty
+// output goes silent under Electron's runtime. Unpackaged development keeps
+// the Electron binary as the fallback Node.
+const nodeExecutablePath = app.isPackaged
+  ? path.join(process.resourcesPath, 'runtime', 'node.exe')
+  : process.execPath
 const backendHost = '127.0.0.1'
 const startupTimeoutMs = 60_000
 
@@ -272,7 +278,7 @@ function prepareBackendContext() {
   const toolchain = prepareDesktopToolchain({
     userDataDirectory: app.getPath('userData'),
     runtimeDirectory: selectedRuntimeDirectory,
-    executablePath: process.execPath,
+    executablePath: nodeExecutablePath,
     preloadPath: runtimePreloadPath,
     dshHome,
   })
@@ -286,7 +292,7 @@ async function prepareBundledPlugins(context) {
     dshHome: context.dshHome,
     packageName: 'dsh-desktop-ui',
     install: targetDirectory => runProcess(
-      process.execPath,
+      nodeExecutablePath,
       [
         '--require', runtimePreloadPath,
         '--expose-internals', context.dshEntry,
@@ -301,31 +307,37 @@ async function prepareBundledPlugins(context) {
 function startBackend(port, context) {
   app.setAppLogsPath()
   const logStream = createWriteStream(path.join(app.getPath('logs'), 'backend.log'), { flags: 'a' })
-  const requireFromRuntime = createRequire(path.join(context.selectedRuntimeDirectory, 'package.json'))
-  const nodePty = requireFromRuntime('node-pty')
 
   backendExitCode = null
-  backendProcess = nodePty.spawn(
-    process.execPath,
+  // Plain pipes, not a pty: node-pty output events never fire under
+  // Electron's runtime, which would leave backend.log permanently silent.
+  // The bundled stock Node.js runs the backend; windowsHide keeps the
+  // console window off the desktop.
+  backendProcess = spawn(
+    nodeExecutablePath,
     [
       '--require', runtimePreloadPath,
       '--expose-internals', context.dshEntry, 'web', '--port', String(port),
     ],
     {
-      name: 'xterm-color',
-      cols: 120,
-      rows: 30,
       cwd: os.homedir(),
       env: context.environment,
+      windowsHide: true,
     },
   )
 
-  backendProcess.onData(data => {
+  const appendOutput = data => {
     appendBackendOutput(data)
     logStream.write(data)
+  }
+  backendProcess.stdout.on('data', appendOutput)
+  backendProcess.stderr.on('data', appendOutput)
+  backendProcess.once('error', error => {
+    appendBackendOutput(`Backend spawn failed: ${String(error)}\n`)
+    backendExitCode = 'spawn-failed'
   })
-  backendProcess.onExit(({ exitCode }) => {
-    backendExitCode = exitCode
+  backendProcess.once('exit', code => {
+    backendExitCode = code
     logStream.end()
   })
 }

@@ -1,7 +1,9 @@
 'use strict'
 
-// The packaged Electron executable doubles as the Node.js runtime used by DSH.
-// Make ordinary Windows child processes background-safe for a GUI application.
+// Preload for the DSH backend, which runs on the bundled stock Node.js (see
+// main.mjs). Make ordinary Windows child processes background-safe for a GUI
+// application; when the backend or its helpers still launch the Electron
+// executable (ELECTRON_RUN_AS_NODE), the same shims keep them quiet.
 const childProcess = require('node:child_process')
 const { registerHooks, syncBuiltinESMExports } = require('node:module')
 const path = require('node:path')

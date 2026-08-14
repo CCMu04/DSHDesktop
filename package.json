@@ -17,11 +17,11 @@
     "test": "node --test test/*.test.mjs test/*.test.cjs",
     "start": "electron .",
     "sync:dsh": "node scripts/sync-dsh.mjs",
-    "prepare:node-pty-ia32": "node scripts/prepare-node-pty-ia32.mjs",
+    "prepare:node": "node scripts/prepare-node-runtime.mjs",
     "prepare:runtime": "node scripts/prepare-runtime.mjs",
-    "dist": "npm run sync:dsh && npm run prepare:node-pty-ia32 && npm run prepare:runtime && electron-builder --win nsis portable --x64 --ia32",
-    "dist:offline": "npm run prepare:node-pty-ia32 && npm run prepare:runtime && electron-builder --win nsis portable --x64 --ia32",
-    "dist:x64:offline": "npm run prepare:runtime && electron-builder --win nsis portable --x64"
+    "dist": "npm run sync:dsh && npm run prepare:runtime && npm run prepare:node && electron-builder --win nsis portable --x64",
+    "dist:offline": "npm run prepare:runtime && npm run prepare:node && electron-builder --win nsis portable --x64",
+    "dist:x64:offline": "npm run dist:offline"
   },
   "dependencies": {
     "@deepseek-ai/cordis-plugin-group": "1.0.1",
@@ -85,6 +85,10 @@
       {
         "from": "build/runtime/runtime.json",
         "to": "runtime/runtime.json"
+      },
+      {
+        "from": "build/runtime/node-x64.exe",
+        "to": "runtime/node.exe"
       },
       {
         "from": "node_modules/7zip-bin/win/x64/7za.exe",

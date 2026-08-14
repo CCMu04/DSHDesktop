@@ -7,16 +7,20 @@ Windows desktop integration around it.
 
 ## Highlights
 
-- The Settings **Open configuration file** action now opens through Electron's native Windows shell,
-  so Electron-based editors such as VS Code no longer inherit backend Node mode.
-- Folder opens use the same desktop bridge, including the new 32-bit build.
+- The DSH backend runs on a bundled official Node.js 24 runtime instead of Electron-as-Node. The
+  native workspace directory picker works again ("open workspace" previously crashed after picking a
+  folder), and backend logs are written to `backend.log` again.
+- The Settings **Open configuration file** action opens through Electron's native Windows shell, so
+  Electron-based editors such as VS Code no longer inherit backend Node mode.
+- Folder opens use the same desktop bridge.
 - `desktop-ui` is bundled, installed, and enabled on first use or after its bundled content changes.
   Subsequent launches preserve the user's choice.
-- Four Windows artifacts are provided: x64 and ia32, each as an installer and portable executable.
+- x64 is the only supported architecture: one installer and one portable executable.
 
 ## Verified
 
 - 7 automated desktop integration tests pass.
-- An isolated DSH Home confirmed configuration-file opening, plugin activation, and preservation of a
-  same-version manual disable.
+- The revised build was smoke-tested end to end: the backend runs on the bundled `node.exe`, logs
+  reach `backend.log`, `host.pickDirectory` opens and closes the native folder dialog without
+  crashing, and core APIs respond.
 - All screenshots in this release show only the DSH Desktop application window.

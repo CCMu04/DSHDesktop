@@ -22,12 +22,26 @@ Desktop integration and 32-bit compatibility preview, still bundling unmodified 
   `node-pty` native modules and ships the matching 32-bit 7-Zip extractor.
 - Add a tag-driven preview Release workflow and architecture-qualified artifact names.
 
+### Revised (2026-08-14)
+
+- Run the DSH backend on a bundled official Node.js 24 runtime instead of Electron-as-Node. Under
+  Electron's runtime the native workspace directory picker (koffi) aborted fatally — "open workspace"
+  failed after picking a folder — and node-pty output events never fired, leaving `backend.log`
+  permanently silent. Both are restored: the native folder dialog works again and backend logs are
+  written.
+- Capture backend output through plain hidden pipes instead of a headless ConPTY.
+- Drop the ia32 builds; x64 is the only supported architecture (Node 24 ships no 32-bit binaries),
+  and the installer now bundles the official `node.exe` (v24.18.1) runtime.
+
 ### Validation
 
 - Seven automated tests cover the native-open bridge, Electron environment cleanup, toolchain, and
   bundled-plugin lifecycle.
 - Isolated-Home UI smoke testing confirmed settings.yaml opens in VS Code, desktop-ui appears enabled,
   and a same-version restart preserves a manual plugin disable.
+- The revised build was smoke-tested end to end: the backend runs on the bundled `node.exe`, logs
+  reach `backend.log`, `host.pickDirectory` opens and closes the native folder dialog without
+  crashing, and core APIs (sessions, host describe) respond.
 
 ## v0.1.0-rc.6.4 — 2026-08-14
 

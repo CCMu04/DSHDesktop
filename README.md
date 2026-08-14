@@ -21,7 +21,7 @@ DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中�
 
 - **官方页面，零前端分叉**：直接加载官方 `dsh web`，界面和能力与对应版本的 DSH 保持一致。
 - **无缝衔接原生 DSH**：默认共用 `~/.dsh`，设置、凭据、会话、Profiles 和插件可以直接互通。
-- **无需全局安装 DSH**：安装包自带匹配版本的 DSH、Node 运行环境和 `pnpm` 工具链。
+- **无需全局安装 DSH**：安装包自带匹配版本的 DSH、官方 Node.js 运行时和 `pnpm` 工具链。
 - **安静的后台终端**：在不破坏 Windows ACL 沙箱的前提下隐藏 PowerShell、Command Prompt 和
   `conhost` 窗口；Agent 的命令输出、退出码和文件操作仍可正常工作。
 - **更轻的运行时升级**：官方运行时以压缩包交付，升级时复用未变化的依赖目录，只替换发生变化的
@@ -29,7 +29,7 @@ DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中�
 - **跟随官方版本**：构建命令会查询 npm 上最新的 DSH 及配套组件，Dependabot 也会每周检查更新。
 - **桌面体验优化**：原生窗口、简洁标题栏、合理的初始尺寸、单实例运行和外部链接安全打开。
 - **可靠的原生打开**：配置文件与工作区目录由 Electron 主进程交给 Windows，避免后端 Node 环境
-  污染 VS Code 等 Electron 应用，也兼容 x64 与 ia32 桌面进程。
+  污染 VS Code 等 Electron 应用。
 - **内置 desktop-ui**：首次使用或内置插件版本更新后的首次启动会安装并默认启用一次；此后不再
   修复或强制启用，用户的停用、启用或移除选择始终优先。
 - **本地优先**：Web 服务只监听随机的本机回环端口，不对局域网暴露。
@@ -40,11 +40,8 @@ DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中�
 
 - [`DSH-Desktop-Setup-0.1.0-rc.6.5-x64.exe`](https://github.com/CCMu04/DSHDesktop/releases/download/v0.1.0-rc.6.5/DSH-Desktop-Setup-0.1.0-rc.6.5-x64.exe)：推荐，64 位标准安装包。
 - [`DSH-Desktop-Portable-0.1.0-rc.6.5-x64.exe`](https://github.com/CCMu04/DSHDesktop/releases/download/v0.1.0-rc.6.5/DSH-Desktop-Portable-0.1.0-rc.6.5-x64.exe)：64 位免安装版。
-- [`DSH-Desktop-Setup-0.1.0-rc.6.5-ia32.exe`](https://github.com/CCMu04/DSHDesktop/releases/download/v0.1.0-rc.6.5/DSH-Desktop-Setup-0.1.0-rc.6.5-ia32.exe)：32 位标准安装包。
-- [`DSH-Desktop-Portable-0.1.0-rc.6.5-ia32.exe`](https://github.com/CCMu04/DSHDesktop/releases/download/v0.1.0-rc.6.5/DSH-Desktop-Portable-0.1.0-rc.6.5-ia32.exe)：32 位免安装版。
 
-支持 Windows 10/11 x64，并为 32 位 Windows 10 提供 ia32 构建；64 位 Windows 也可运行 ia32
-构建。首次启动需要展开约 300 MB 的官方运行组件，因此会比后续启动稍慢。
+支持 Windows 10/11 x64。首次启动需要展开约 300 MB 的官方运行组件，因此会比后续启动稍慢。
 
 ## 与原生 DSH 的数据关系
 
@@ -71,8 +68,7 @@ DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中�
 
 ## 本地构建
 
-构建 x64 与 ia32 完整发布矩阵要求 Windows 10/11、Node.js 24、npm，以及带 C++ 桌面开发
-工作负载的 Visual Studio 2022（用于从上游 `node-pty` 源码生成 ia32 原生模块）：
+构建 x64 发布包要求 Windows 10/11 和 Node.js 22.19+ 或 24（构建机自带即可，目标机不需要）：
 
 ```powershell
 git clone https://github.com/CCMu04/DSHDesktop.git
@@ -81,28 +77,22 @@ npm install
 npm run dist
 ```
 
-生成内容位于 `dist/`。如需复现锁定版本：
+生成内容位于 `dist/`。如需复现锁定版本（`build/runtime/node-x64.exe` 已下载过时可离线完成）：
 
 ```powershell
 npm ci
 npm run dist:offline
 ```
 
-只需在 64 位 Windows 上离线重建 x64 包时，可运行：
-
-```powershell
-npm ci
-npm run dist:x64:offline
-```
-
 ## 工作原理
 
-桌面壳启动官方 DSH Web 服务并将其加载到隔离的 Electron 窗口。后端运行在无界面的 ConPTY
-会话中；桌面兼容层只调整 Windows 进程的窗口显示状态，不取消控制台，也不绕过 DSH 的 ACL
-沙箱。官方包在磁盘上保持原样。
+桌面壳启动官方 DSH Web 服务并将其加载到隔离的 Electron 窗口。后端运行在安装包内置的官方
+Node.js 运行时中（DSH 的原生目录选择器依赖的 koffi 绑定与 node-pty 输出在 Electron-as-Node
+下不可用，因此后端不能借用 Electron 进程）；桌面兼容层只调整 Windows 进程的窗口显示状态，
+不取消控制台，也不绕过 DSH 的 ACL 沙箱。官方包在磁盘上保持原样。
 
 设置页的配置文件打开请求与目录打开请求仍先交给官方 Host 校验和处理；请求完成后，桌面壳再由
-Electron 主进程执行一次 Windows 原生打开。这一适配避开后端必须携带的
+Electron 主进程执行一次 Windows 原生打开。这一适配避免后端必须携带的
 `ELECTRON_RUN_AS_NODE`/`NODE_OPTIONS`，不会修改官方 Host 或 Web UI 源码。
 
 ## 安全与隐私
