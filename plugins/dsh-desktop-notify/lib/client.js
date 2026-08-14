@@ -4,9 +4,11 @@
  * 「完成提醒」功能增强：
  *   - 订阅当前会话的 ConversationSnapshot（sessions 服务），按 running
  *     true→false 边缘判定回复完成（与官方侧边栏 completed 提醒同一判定）；
- *   - 完成瞬间窗口不在前台（document.hasFocus() 为 false，覆盖失焦/最小化）
- *     时，用系统通知（HTML5 Notification → Windows 右下角 toast）提醒；
- *     点击通知把窗口带回前台；
+ *   - 按 pending（待回应交互）空→非空边缘判定 AI 调起询问（工具审批
+ *     approval / 提问 question）；
+ *   - 上述事件发生瞬间窗口不在前台（document.hasFocus() 为 false，覆盖
+ *     失焦/最小化）时，用系统通知（HTML5 Notification → Windows 右下角
+ *     toast）提醒；点击通知把窗口带回前台；
  *   - 「功能增强」卡片子项（desktop.features.item）数据接口：启用/停用。
  *
  * 开关由 host 端持久化（/api/desktop-notify/config）。
@@ -135,6 +137,31 @@ window.__ModuleLoader__.load({
       let sessionOff = null;
       /** null = 尚未观察（首次快照只记录 running 位，不提醒）。 */
       let prevRunning = null;
+      /** 上次快照的待回应交互数（空 → 非空边缘 = AI 调起询问）。 */
+      let prevPendingCount = 0;
+
+      /** 实时焦点判定：优先 document.hasFocus()，异常回退事件驱动值。 */
+      const isWindowFocused = () => {
+        try {
+          return document.hasFocus() === true;
+        } catch {
+          return focused;
+        }
+      };
+
+      const showNotification = (title, body) => {
+        let notice;
+        try {
+          notice = new Notification(title, { body });
+        } catch {
+          return;
+        }
+        notice.onclick = () => {
+          try {
+            window.focus();
+          } catch {}
+        };
+      };
 
       const maybeNotify = (snap) => {
         const nodes = Array.isArray(snap?.nodes) ? snap.nodes : [];
@@ -149,17 +176,46 @@ window.__ModuleLoader__.load({
               ? t("notify.empty")
               : truncate(preview, ddnPreviewLimit);
         }
-        let notice;
-        try {
-          notice = new Notification(t("notify.title"), { body });
-        } catch {
-          return;
+        showNotification(t("notify.title"), body);
+      };
+
+      /** AI 调起询问（审批 / 提问）时的通知正文。 */
+      const pendingNotificationBody = (pending) => {
+        const wait = pending[0];
+        if (wait?.kind === "approval") {
+          const tool =
+            typeof wait.payload?.toolName === "string" &&
+            wait.payload.toolName !== ""
+              ? wait.payload.toolName
+              : t("notify.toolUnknown");
+          return {
+            title: t("notify.approvalTitle"),
+            body: t("notify.approvalBody", { tool: truncate(tool, 40) }),
+          };
         }
-        notice.onclick = () => {
-          try {
-            window.focus();
-          } catch {}
-        };
+        if (wait?.kind === "question") {
+          const questions = Array.isArray(wait.payload?.questions)
+            ? wait.payload.questions
+            : [];
+          const first = questions[0];
+          const text =
+            typeof first?.question === "string" && first.question !== ""
+              ? first.question
+              : "";
+          return {
+            title: t("notify.questionTitle"),
+            body:
+              text === ""
+                ? t("notify.questionEmpty")
+                : truncate(text, ddnPreviewLimit),
+          };
+        }
+        return { title: t("notify.questionTitle"), body: t("notify.questionEmpty") };
+      };
+
+      const maybeNotifyPending = (pending) => {
+        const content = pendingNotificationBody(pending);
+        showNotification(content.title, content.body);
       };
 
       const onSessionChange = () => {
@@ -173,20 +229,24 @@ window.__ModuleLoader__.load({
           prevRunning = running;
           return;
         }
-        if (prevRunning && !running && !focused) {
+        if (prevRunning && !running && !isWindowFocused()) {
           maybeNotify(snap);
         }
         prevRunning = running;
+        // AI 调起询问：待回应交互从无到有且窗口不在前台时提醒。
+        const pending = Array.isArray(snap?.pending) ? snap.pending : [];
+        if (prevPendingCount === 0 && pending.length > 0 && !isWindowFocused()) {
+          maybeNotifyPending(pending);
+        }
+        prevPendingCount = pending.length;
       };
 
-      /** 跟随当前会话（列表 current 变化时重新订阅）。 */
+      /**
+       * 跟随当前会话：仅当列表 current 变化时重建订阅。列表快照会随会话
+       * 活动（任务、摘要等）频繁变化，若每次都重建，running 基线会被反复
+       * 重置成「首次观察」，完成边缘（true→false）将永远被吞掉。
+       */
       const attach = () => {
-        if (sessionOff !== null) {
-          sessionOff();
-          sessionOff = null;
-        }
-        currentId = null;
-        prevRunning = null;
         let listSnap;
         try {
           listSnap = sessions.list.getSnapshot();
@@ -194,8 +254,15 @@ window.__ModuleLoader__.load({
           return;
         }
         const id = listSnap?.current ?? void 0;
+        if (id === currentId) return;
+        if (sessionOff !== null) {
+          sessionOff();
+          sessionOff = null;
+        }
+        currentId = id ?? null;
+        prevRunning = null;
+        prevPendingCount = 0;
         if (id === void 0) return;
-        currentId = id;
         const binding = sessions.binding(id);
         if (binding === void 0) return;
         sessionOff = binding.session.subscribe(onSessionChange);
@@ -238,18 +305,28 @@ window.__ModuleLoader__.load({
     const zh = {
       "feature.title": "完成提醒",
       "feature.description":
-        "回复完成且应用窗口不在前台时，在右下角弹出系统通知提醒",
+        "回复完成或 AI 调起询问、应用窗口不在前台时，在右下角弹出系统通知提醒",
       "notify.title": "对话完成",
       "notify.error": "回复出错了",
       "notify.empty": "回复已生成",
+      "notify.approvalTitle": "需要你的确认",
+      "notify.approvalBody": "是否允许执行「{tool}」",
+      "notify.toolUnknown": "工具",
+      "notify.questionTitle": "需要你的回应",
+      "notify.questionEmpty": "AI 正在等待你的回答",
     };
     const en = {
       "feature.title": "Completion reminder",
       "feature.description":
-        "Show a system notification in the bottom-right corner when a reply finishes while the app window is not focused",
+        "Show a system notification in the bottom-right corner when a reply finishes or the AI asks for input while the app window is not focused",
       "notify.title": "Conversation finished",
       "notify.error": "The reply failed",
       "notify.empty": "Reply generated",
+      "notify.approvalTitle": "Your approval is needed",
+      "notify.approvalBody": "Allow running \"{tool}\"?",
+      "notify.toolUnknown": "a tool",
+      "notify.questionTitle": "Your input is needed",
+      "notify.questionEmpty": "The AI is waiting for your answer",
     };
     //#endregion
 

@@ -92,7 +92,8 @@ const sessions = {
 // --- cordis ctx stub ----------------------------------------------------------
 const registered = []
 const ctx = {
-  locale: { bind: () => (key) => key, register() {} },
+  // 带参数插值的翻译 stub：有 params 时把键名与参数一起返回，便于断言。
+  locale: { bind: () => (key, params) => (params ? `${key} ${JSON.stringify(params)}` : key), register() {} },
   slots: {
     register(options, component) { return { options, component } },
     inject(name, factory) {
@@ -195,6 +196,92 @@ sessionListener()
 if (notifications.length !== 1) throw new Error(`long should notify once, got ${notifications.length}`)
 const body = notifications[0].options.body
 if (body.length >= 150 || !body.endsWith('…')) throw new Error(`body not truncated: length=${body.length}`)
+
+// 7) list churn with unchanged current must NOT reset the running baseline
+//    (regression: frequent list notifications used to re-run the first
+//    observation, swallowing the completion edge)
+notifications.length = 0
+sessionSnap = { running: true, nodes: [] }
+sessionListener()
+if (listListener !== null) listListener() // list snapshot changed, current same
+if (listListener !== null) listListener()
+if (listListener !== null) listListener()
+sessionSnap = { running: false, nodes: [{ kind: 'assistant', seq: 7, blocks: [{ kind: 'text', text: 'z' }] }] }
+sessionListener()
+if (notifications.length !== 1) throw new Error(`list churn swallowed completion, got ${notifications.length}`)
+
+// --- pending (AI asks for input) ----------------------------------------------
+// 8) approval arrives while unfocused → approval notification with tool name
+notifications.length = 0
+sessionSnap = {
+  running: false,
+  nodes: [],
+  pending: [{ kind: 'approval', key: 'approval:1', sessionId: 's1', payload: { toolName: 'fs_write' } }],
+}
+sessionListener()
+if (notifications.length !== 1) throw new Error(`approval should notify, got ${notifications.length}`)
+if (notifications[0].title !== 'notify.approvalTitle') throw new Error(`approval title wrong: ${notifications[0].title}`)
+if (!String(notifications[0].options.body).includes('fs_write')) throw new Error(`approval body wrong: ${notifications[0].options.body}`)
+
+// 9) question arrives after pending cleared → question notification with question text
+notifications.length = 0
+sessionSnap = { running: false, nodes: [], pending: [] }
+sessionListener() // settle the approval: pending → empty
+sessionSnap = {
+  running: false,
+  nodes: [],
+  pending: [{ kind: 'question', key: 'question:2', sessionId: 's1', payload: { questions: [{ id: 'q1', question: '是否继续执行？' }] } }],
+}
+sessionListener()
+if (notifications.length !== 1) throw new Error(`question should notify, got ${notifications.length}`)
+if (notifications[0].title !== 'notify.questionTitle') throw new Error(`question title wrong: ${notifications[0].title}`)
+if (!String(notifications[0].options.body).includes('是否继续执行？')) throw new Error(`question body wrong: ${notifications[0].options.body}`)
+
+// 10) pending stays non-empty (count shrinks but not to zero) → no repeat
+notifications.length = 0
+sessionSnap = {
+  running: false,
+  nodes: [],
+  pending: [
+    { kind: 'approval', key: 'approval:3', sessionId: 's1', payload: { toolName: 'a' } },
+    { kind: 'question', key: 'question:4', sessionId: 's1', payload: { questions: [{ id: 'q2', question: 'b' }] } },
+  ],
+}
+sessionListener()
+sessionSnap = {
+  running: false,
+  nodes: [],
+  pending: [{ kind: 'approval', key: 'approval:3', sessionId: 's1', payload: { toolName: 'a' } }],
+}
+sessionListener()
+if (notifications.length !== 0) throw new Error(`persistent pending should not repeat, got ${notifications.length}`)
+
+// 11) pending cleared then a new one arrives → notify again
+sessionSnap = { running: false, nodes: [], pending: [] }
+sessionListener()
+sessionSnap = {
+  running: false,
+  nodes: [],
+  pending: [{ kind: 'question', key: 'question:5', sessionId: 's1', payload: { questions: [{ id: 'q3', question: '再问一次？' }] } }],
+}
+sessionListener()
+if (notifications.length !== 1) throw new Error(`new pending after clear should notify, got ${notifications.length}`)
+
+// 12) pending while window focused → no notification
+notifications.length = 0
+focused = true
+for (const fn of windowListeners.focus ?? []) fn()
+sessionSnap = { running: false, nodes: [], pending: [] }
+sessionListener()
+sessionSnap = {
+  running: false,
+  nodes: [],
+  pending: [{ kind: 'approval', key: 'approval:6', sessionId: 's1', payload: { toolName: 'x' } }],
+}
+sessionListener()
+if (notifications.length !== 0) throw new Error(`focused pending should not notify, got ${notifications.length}`)
+focused = false
+for (const fn of windowListeners.blur ?? []) fn()
 
 // --- disabled: no reminder logic installed -----------------------------------
 notifyEnabled = false
