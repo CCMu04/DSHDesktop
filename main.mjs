@@ -474,13 +474,12 @@ function ensureTray() {
 // Tray commands run inside the web page: the shell has no IPC bridge into the
 // UI, so the command is dispatched as a DOM event handled by the
 // dsh-desktop-tray plugin, which calls the official client services
-// (workspaces.startSession / pickDirectory / create).
+// (workspaces.startSession / pickDirectory / create). The window is brought
+// to the foreground first so the user sees the new session / workspace.
 function sendTrayCommand(command) {
   if (!mainWindow || mainWindow.isDestroyed()) return
-  if (!isBackendUrl(mainWindow.webContents.getURL())) {
-    showMainWindow()
-    return
-  }
+  showMainWindow()
+  if (!isBackendUrl(mainWindow.webContents.getURL())) return
   void mainWindow.webContents
     .executeJavaScript(
       `window.dispatchEvent(new CustomEvent('dsh-desktop-tray-command', { detail: ${JSON.stringify(command)} }))`,
@@ -489,8 +488,10 @@ function sendTrayCommand(command) {
 }
 
 // Update check runs in the main process against the same GitHub Releases
-// source the settings-page updater uses; the result lands in a native dialog.
+// source the settings-page updater uses; the result lands in a native dialog
+// (the window is brought up first so the dialog is visible).
 async function checkForUpdates() {
+  showMainWindow()
   const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined
   const currentVersion = app.getVersion()
   try {
