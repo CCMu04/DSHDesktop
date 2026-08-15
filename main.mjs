@@ -78,7 +78,6 @@ let tray
 let quitting = false
 let recentBackendOutput = ''
 let runtimeDirectory
-let minimizeNotified = false
 
 async function setLoadingStatus(message) {
   if (!mainWindow || mainWindow.isDestroyed()) return
@@ -444,10 +443,6 @@ function showMainWindow() {
 function minimizeToTray() {
   ensureTray()
   mainWindow?.hide()
-  if (!minimizeNotified) {
-    minimizeNotified = true
-    new Notification(MINIMIZE_TO_TRAY_NOTIFICATION).show()
-  }
 }
 
 function ensureTray() {
@@ -519,8 +514,16 @@ async function checkForUpdates() {
 function applyCloseBehavior(behavior, remembered) {
   if (remembered) saveCloseBehavior({ behavior, remembered: true })
   else if (loadCloseBehavior().remembered) saveCloseBehavior({ behavior, remembered: false })
-  if (behavior === 'minimize') minimizeToTray()
-  else mainWindow?.destroy()
+  if (behavior === 'minimize') {
+    minimizeToTray()
+    // The notification shows only when the user checks 「记住我的选择」 with
+    // minimize (i.e. opts out of the dialog): it explains how to fully quit.
+    // Un-remembering and checking it again notifies once more; plain
+    // minimize-to-tray afterwards stays silent.
+    if (remembered) new Notification(MINIMIZE_TO_TRAY_NOTIFICATION).show()
+  } else {
+    mainWindow?.destroy()
+  }
 }
 
 async function askCloseBehavior() {
