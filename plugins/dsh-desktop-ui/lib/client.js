@@ -103,7 +103,7 @@ window.__ModuleLoader__.load({
       return () => tag.remove();
     };
     const css =
-      ".dshDesktopUi_trigger{box-sizing:border-box;min-height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:0;border-radius:6px;align-items:center;gap:4px;padding:0 8px;font-size:12px;line-height:20px;white-space:nowrap;display:inline-flex}.dshDesktopUi_trigger:hover:not(:disabled),.dshDesktopUi_trigger:focus-visible{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover)}.dshDesktopUi_trigger:disabled{color:var(--dsw-alias-label-dimmed);cursor:wait}.dshDesktopUi_trigger svg,.dshDesktopUi_trigger span{flex:none}";
+      ".dshDesktopUi_trigger{box-sizing:border-box;min-height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:0;border-radius:6px;align-items:center;gap:4px;padding:0 8px;font-size:12px;line-height:20px;white-space:nowrap;display:inline-flex}.dshDesktopUi_trigger:hover:not(:disabled),.dshDesktopUi_trigger:focus-visible{color:var(--dsw-alias-label-secondary)}.dshDesktopUi_trigger:disabled{color:var(--dsw-alias-label-dimmed);cursor:wait}.dshDesktopUi_trigger svg,.dshDesktopUi_trigger span{flex:none}";
     const tagId = "dsh-desktop-ui/HeaderAction.module.css";
     const installHeaderActionCss = () => dduiInstallCss(css, tagId);
     //#endregion
