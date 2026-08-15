@@ -16,7 +16,7 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog, Menu, nativeImage, nativeTheme, net as electronNet, Notification, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, Menu, nativeImage, nativeTheme, net as electronNet, Notification, screen, shell, Tray } from 'electron'
 import { ensureBundledPlugin } from './builtin-plugin.mjs'
 import { prepareDesktopToolchain } from './toolchain.mjs'
 import {
@@ -33,6 +33,12 @@ import {
   isUpdateAvailable,
   LATEST_RELEASE_URL,
 } from './update-check.mjs'
+import {
+  parseWindowState,
+  sanitizeWindowState,
+  serializeWindowState,
+  WINDOW_STATE_FILE,
+} from './window-state.mjs'
 
 const shellDirectory = path.dirname(fileURLToPath(import.meta.url))
 const runtimePreloadPath = app.isPackaged
@@ -420,6 +426,42 @@ function getCloseBehaviorPath() {
   return path.join(resolveSharedDshHome(), CLOSE_BEHAVIOR_FILE)
 }
 
+// --- Window geometry persistence ------------------------------------------
+// The window bounds (normal bounds, so maximized/full-screen windows restore
+// their pre-maximize geometry), maximized and full-screen flags are saved to
+// $DSH_HOME/desktop-window.json and restored on the next launch.
+
+function getWindowStatePath() {
+  return path.join(resolveSharedDshHome(), WINDOW_STATE_FILE)
+}
+
+function loadWindowState() {
+  try {
+    const parsed = parseWindowState(readFileSync(getWindowStatePath(), 'utf8'))
+    return sanitizeWindowState(
+      parsed,
+      screen.getAllDisplays().map(display => display.workArea),
+    )
+  } catch {
+    return parseWindowState(undefined)
+  }
+}
+
+function saveWindowState() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const state = {
+    bounds: mainWindow.getNormalBounds(),
+    isMaximized: mainWindow.isMaximized(),
+    isFullScreen: mainWindow.isFullScreen(),
+  }
+  try {
+    mkdirSync(path.dirname(getWindowStatePath()), { recursive: true })
+    writeFileSync(getWindowStatePath(), serializeWindowState(state), 'utf8')
+  } catch {
+    // Persisting window geometry must never break the app.
+  }
+}
+
 function loadCloseBehavior() {
   try {
     return parseCloseBehavior(readFileSync(getCloseBehaviorPath(), 'utf8'))
@@ -642,9 +684,11 @@ async function createWindow() {
   // initial background and window-control glyph colors do too; once the
   // backend page loads, its own theme report takes over.
   const systemDark = nativeTheme.shouldUseDarkColors
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
+  // Restore the window geometry remembered from the previous run; bounds are
+  // validated against the current displays, so a window saved on a monitor
+  // that is no longer connected falls back to the defaults below.
+  const savedWindowState = loadWindowState()
+  const windowOptions = {
     minWidth: 900,
     minHeight: 600,
     show: false,
@@ -661,7 +705,14 @@ async function createWindow() {
       nodeIntegration: false,
       sandbox: true,
     },
-  })
+  }
+  if (savedWindowState?.bounds) {
+    Object.assign(windowOptions, savedWindowState.bounds)
+  } else {
+    windowOptions.width = 1280
+    windowOptions.height = 800
+  }
+  mainWindow = new BrowserWindow(windowOptions)
   configureNavigation(mainWindow)
   // Closing the window stops the local backend and its reserved port, which
   // changes the Web address on next launch. Unless the user chose to fully
@@ -679,7 +730,25 @@ async function createWindow() {
     event.preventDefault()
     void askCloseBehavior()
   })
-  mainWindow.once('ready-to-show', () => mainWindow?.show())
+  // Persist the window geometry (bounds + maximized / full-screen flags) on
+  // any change, debounced; a final flush happens in before-quit.
+  let windowStatePending = false
+  const scheduleWindowStateSave = () => {
+    if (windowStatePending) return
+    windowStatePending = true
+    setTimeout(() => {
+      windowStatePending = false
+      saveWindowState()
+    }, 300)
+  }
+  for (const eventName of ['resize', 'move', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
+    mainWindow.on(eventName, scheduleWindowStateSave)
+  }
+  mainWindow.once('ready-to-show', () => {
+    if (savedWindowState?.isFullScreen) mainWindow?.setFullScreen(true)
+    else if (savedWindowState?.isMaximized) mainWindow?.maximize()
+    mainWindow?.show()
+  })
   await mainWindow.loadFile(path.join(shellDirectory, 'loading.html'))
 }
 
@@ -741,6 +810,7 @@ app.on('window-all-closed', () => app.quit())
 app.on('before-quit', () => {
   if (quitting) return
   quitting = true
+  saveWindowState()
   tray?.destroy()
   stopBackend()
 })
