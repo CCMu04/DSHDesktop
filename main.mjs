@@ -16,9 +16,16 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog, Menu, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, dialog, Menu, nativeImage, nativeTheme, Notification, shell, Tray } from 'electron'
 import { ensureBundledPlugin } from './builtin-plugin.mjs'
 import { prepareDesktopToolchain } from './toolchain.mjs'
+import {
+  buildCloseDialogOptions,
+  CLOSE_BEHAVIOR_FILE,
+  MINIMIZE_TO_TRAY_NOTIFICATION,
+  parseCloseBehavior,
+  serializeCloseBehavior,
+} from './close-behavior.mjs'
 
 const shellDirectory = path.dirname(fileURLToPath(import.meta.url))
 const runtimePreloadPath = app.isPackaged
@@ -60,9 +67,11 @@ let backendProcess
 let backendExitCode = null
 let backendOrigin
 let mainWindow
+let tray
 let quitting = false
 let recentBackendOutput = ''
 let runtimeDirectory
+let minimizeNotified = false
 
 async function setLoadingStatus(message) {
   if (!mainWindow || mainWindow.isDestroyed()) return
@@ -395,6 +404,75 @@ function syncTitleBarOverlayFromNativeTheme(window) {
   syncTitleBarOverlay(window, nativeTheme.shouldUseDarkColors ? titleBarSymbolDark : titleBarSymbolLight)
 }
 
+// --- Close behavior: minimize to tray vs. full quit -----------------------
+// Closing the window stops the local backend and with it the reserved port,
+// so the next launch gets a new Web address. The first close asks once (with
+// a remember option); by default the window minimizes to the tray instead,
+// and only the tray menu's 退出 fully quits.
+
+function getCloseBehaviorPath() {
+  return path.join(resolveSharedDshHome(), CLOSE_BEHAVIOR_FILE)
+}
+
+function loadCloseBehavior() {
+  try {
+    return parseCloseBehavior(readFileSync(getCloseBehaviorPath(), 'utf8'))
+  } catch {
+    return parseCloseBehavior(undefined)
+  }
+}
+
+function saveCloseBehavior(config) {
+  mkdirSync(path.dirname(getCloseBehaviorPath()), { recursive: true })
+  writeFileSync(getCloseBehaviorPath(), serializeCloseBehavior(config), 'utf8')
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function minimizeToTray() {
+  ensureTray()
+  mainWindow?.hide()
+  if (!minimizeNotified) {
+    minimizeNotified = true
+    new Notification(MINIMIZE_TO_TRAY_NOTIFICATION).show()
+  }
+}
+
+function ensureTray() {
+  if (tray) return
+  tray = new Tray(nativeImage.createFromPath(path.join(shellDirectory, 'assets', 'icon.png')))
+  tray.setToolTip('DeepSeek Harness')
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: '显示主窗口', click: showMainWindow },
+      { type: 'separator' },
+      { label: '关闭行为设置…', click: () => void askCloseBehavior() },
+      { type: 'separator' },
+      { label: '退出', click: () => app.quit() },
+    ]),
+  )
+  tray.on('click', showMainWindow)
+}
+
+function applyCloseBehavior(behavior, remembered) {
+  if (remembered) saveCloseBehavior({ behavior, remembered: true })
+  else if (loadCloseBehavior().remembered) saveCloseBehavior({ behavior, remembered: false })
+  if (behavior === 'minimize') minimizeToTray()
+  else mainWindow?.destroy()
+}
+
+async function askCloseBehavior() {
+  const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined
+  const remembered = loadCloseBehavior().remembered
+  const { response, checkboxChecked } = await dialog.showMessageBox(parent, buildCloseDialogOptions(remembered))
+  applyCloseBehavior(response === 0 ? 'minimize' : 'quit', checkboxChecked)
+}
+
 function configureNavigation(window) {
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (isBackendUrl(url)) return { action: 'allow' }
@@ -525,6 +603,22 @@ async function createWindow() {
     },
   })
   configureNavigation(mainWindow)
+  // Closing the window stops the local backend and its reserved port, which
+  // changes the Web address on next launch. Unless the user chose to fully
+  // quit (and remembered it), the window minimizes to the tray instead; the
+  // tray menu's 退出 is the only way to fully quit while minimized.
+  mainWindow.on('close', event => {
+    if (quitting) return
+    const config = loadCloseBehavior()
+    if (config.remembered && config.behavior === 'minimize') {
+      event.preventDefault()
+      minimizeToTray()
+      return
+    }
+    if (config.remembered) return
+    event.preventDefault()
+    void askCloseBehavior()
+  })
   mainWindow.once('ready-to-show', () => mainWindow?.show())
   await mainWindow.loadFile(path.join(shellDirectory, 'loading.html'))
 }
@@ -560,10 +654,7 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) app.quit()
 
 app.on('second-instance', () => {
-  if (!mainWindow) return
-  if (mainWindow.isMinimized()) mainWindow.restore()
-  mainWindow.show()
-  mainWindow.focus()
+  showMainWindow()
 })
 
 app.whenReady().then(async () => {
@@ -590,5 +681,6 @@ app.on('window-all-closed', () => app.quit())
 app.on('before-quit', () => {
   if (quitting) return
   quitting = true
+  tray?.destroy()
   stopBackend()
 })
