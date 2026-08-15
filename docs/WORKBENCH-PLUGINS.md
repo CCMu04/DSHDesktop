@@ -1,6 +1,6 @@
 # 桌面端工作台插件拆分设计
 
-> 参考 [dsh-better-sidebar](https://github.com/omdsh-dev/DSH-better-sidebar)（社区侧边栏工作台）的功能集，按「一个功能一个插件」的原则拆分为独立内置插件，全部遵循 [PLUGINS.md](PLUGINS.md) 的内置插件规范。本文档是开发蓝图，落地时每个插件自带配置测试与客户端测试。
+> **致谢**：本工作台的功能集参考了 [DSH-better-sidebar](https://github.com/omdsh-dev/DSH-better-sidebar)（社区侧边栏工作台）——右侧分栏框架、文件预览器集合、Git 面板（status / diff / stage / commit，无 push / pull / fetch 的边界）等思路均源于该项目，特此向作者与贡献者致谢。实现上按 [PLUGINS.md](PLUGINS.md) 的内置插件规范从零编写，未复制其代码。本文档是开发蓝图，落地时每个插件自带配置测试与客户端测试。
 
 ## 1. 背景与拆分原则
 

@@ -115,4 +115,6 @@ npm run dist:offline
 
 本项目是社区维护的非官方桌面封装，与 DeepSeek 无隶属或背书关系。"DeepSeek"、"DeepSeek Harness" 及相关标识归其权利人所有。官方 DSH 使用 MIT License，详见[上游项目](https://github.com/deepseek-ai/deepseek-harness)与[第三方声明](THIRD_PARTY_NOTICES.md)。
 
+内置工作台（右侧分栏、文件预览、Git 面板等功能集）参考了 [DSH-better-sidebar](https://github.com/omdsh-dev/DSH-better-sidebar)（社区侧边栏工作台），在此向该项目的作者与贡献者致谢。实现按本仓库的插件规范从零编写，未复制其代码；功能边界（如 Git 面板不做 push / fetch、Office 不做内嵌预览）与其保持一致。
+
 本项目自身代码使用 [MIT License](LICENSE)。
