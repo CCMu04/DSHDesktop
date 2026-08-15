@@ -723,7 +723,6 @@ window.__ModuleLoader__.load({
             "aria-label": t("resizePanel"),
             onPointerDown: (event) => {
               event.preventDefault();
-              event.currentTarget.setPointerCapture(event.pointerId);
               // 拖拽期间禁用对话页根的 grid 过渡，列宽才跟手。
               if (typeof ddwbBridge.setDragging === "function") {
                 ddwbBridge.setDragging(true);
@@ -735,41 +734,41 @@ window.__ModuleLoader__.load({
                 rawWidth: layoutRef.current.width,
                 lastWidth: layoutRef.current.width,
               };
-            },
-            onPointerMove: (event) => {
-              const drag = dragRef.current;
-              if (drag === null) return;
-              const dx = event.clientX - drag.startX;
-              if (Math.abs(dx) > 3) drag.moved = true;
-              if (!drag.moved) return;
-              // rawWidth 不钳制：用于「拖到很窄自动收起」判断。
-              drag.rawWidth = drag.startWidth - dx;
-              drag.lastWidth = ddwbClampWidth(drag.rawWidth);
-              // 同步写轨道（不经 rAF / React state）：拖动中宽度实时跟手。
-              // 拖到很窄（< 200px）→ 自动收起：轨道归 0、结束拖拽状态。
-              if (drag.rawWidth < ddwbCollapseWidth) {
-                dragRef.current = null;
-                if (typeof ddwbBridge.setTrack === "function") {
-                  ddwbBridge.setTrack(0);
+              // 不用 setPointerCapture：列宽变化触发 grid 重排 / 组件重渲染时，
+              // capture 会随节点替换隐式释放，后续 move 事件丢失（卡顿根因）。
+              // 改在 window 上监听原生 pointer 事件，与 DOM 结构变化无关。
+              const onMove = (moveEvent) => {
+                const drag = dragRef.current;
+                if (drag === null) return;
+                const dx = moveEvent.clientX - drag.startX;
+                if (Math.abs(dx) > 3) drag.moved = true;
+                if (!drag.moved) return;
+                // rawWidth 不钳制：用于「拖到很窄自动收起」判断。
+                drag.rawWidth = drag.startWidth - dx;
+                drag.lastWidth = ddwbClampWidth(drag.rawWidth);
+                // 同步写轨道（不经 rAF / React state）：拖动中宽度实时跟手。
+                // 拖到很窄（< 200px）→ 自动收起：轨道归 0、结束拖拽状态。
+                if (drag.rawWidth < ddwbCollapseWidth) {
+                  dragRef.current = null;
+                  cleanup();
+                  if (typeof ddwbBridge.setTrack === "function") {
+                    ddwbBridge.setTrack(0);
+                  }
+                  service.setOpen(false);
+                  return;
                 }
-                service.setOpen(false);
-                return;
-              }
-              if (typeof ddwbBridge.setTrack === "function") {
-                ddwbBridge.setTrack(drag.lastWidth);
-              }
-            },
-            onPointerUp: (event) => {
-              const drag = dragRef.current;
-              if (drag === null) return;
-              dragRef.current = null;
-              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                event.currentTarget.releasePointerCapture(event.pointerId);
-              }
-              if (typeof ddwbBridge.setDragging === "function") {
-                ddwbBridge.setDragging(false);
-              }
-              if (drag.moved) {
+                if (typeof ddwbBridge.setTrack === "function") {
+                  ddwbBridge.setTrack(drag.lastWidth);
+                }
+              };
+              const onUp = (upEvent) => {
+                const drag = dragRef.current;
+                dragRef.current = null;
+                cleanup();
+                if (typeof ddwbBridge.setDragging === "function") {
+                  ddwbBridge.setDragging(false);
+                }
+                if (!drag || !drag.moved) return;
                 if (drag.rawWidth < ddwbCollapseWidth) {
                   // 快速拖放：宽度已低于收起阈值 → 直接收起。
                   if (typeof ddwbBridge.setTrack === "function") {
@@ -780,9 +779,17 @@ window.__ModuleLoader__.load({
                   // 拖拽结束：收敛一次状态（触发布局持久化），列宽已实时写入轨道。
                   setLayout((prev) => ({ ...prev, width: drag.lastWidth }));
                 }
-              }
-              // 无位移的按下释放（点击）不做收起——统一走 Header [|] 按钮。
+              };
+              const cleanup = () => {
+                window.removeEventListener("pointermove", onMove);
+                window.removeEventListener("pointerup", onUp);
+              };
+              window.addEventListener("pointermove", onMove);
+              window.addEventListener("pointerup", onUp);
+              dragRef.current._cleanup = cleanup;
             },
+            onPointerMove: () => {},
+            onPointerUp: () => {},
           }),
           jsxs("div", {
             className: "ddwb_header",
@@ -893,18 +900,24 @@ window.__ModuleLoader__.load({
       };
       // 根出现/消失（会话打开/关闭、页面加载、会话切换重建）→ attach/detach。
       // [data-chat-flow] 出现/消失（对话 ↔ 轨迹视图切换）→ 恢复/钳 0 轨道。
+      // 注意：只在 flow 状态【切换】时设置轨道——拖动调宽会改变 grid 布局
+      // 触发本观察器，若每次都用 trackWidth（打开时快照）覆盖轨道，拖动中
+      // 的实时宽度会被立刻重置回原值（卡顿根因）。
+      let lastShow = null;
       const flowObserver = new MutationObserver(() => {
         if (disposed) return;
         if (findRoot() !== null) {
           tryAttach();
-          // 视图切换只影响列显隐，不销毁列：对话视图在 → 恢复轨道；
-          // 不在（轨迹页 / 无会话）→ 钳 0。
           const show = findChatFlow() !== null;
-          const target = show ? ddwbBridge.trackWidth : 0;
-          if (typeof ddwbBridge.setTrack === "function") {
-            ddwbBridge.setTrack(target);
+          if (show !== lastShow) {
+            lastShow = show;
+            const target = show ? ddwbBridge.trackWidth : 0;
+            if (typeof ddwbBridge.setTrack === "function") {
+              ddwbBridge.setTrack(target);
+            }
           }
         } else {
+          lastShow = null;
           detach();
         }
       });
