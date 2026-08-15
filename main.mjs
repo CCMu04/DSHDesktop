@@ -510,7 +510,7 @@ async function createWindow() {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    backgroundColor: systemDark ? '#14161a' : '#f7f8fa',
+    backgroundColor: systemDark ? '#151517' : '#f9fafb',
     icon: path.join(shellDirectory, 'assets', 'icon.png'),
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
