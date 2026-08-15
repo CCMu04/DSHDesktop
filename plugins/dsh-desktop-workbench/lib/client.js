@@ -59,6 +59,20 @@ window.__ModuleLoader__.load({
     /** AppFrame 容器特征：唯一带内联 grid-template-columns 的元素。 */
     const ddwbFrameSelector = '[style*="grid-template-columns"]';
 
+    /**
+     * 功能页签横向滚动：滚动条已隐藏，把鼠标滚轮的垂直滚动转成横向位移
+     * （React 的 onWheel 是 passive，必须原生绑定）；无溢出时不消费滚轮，
+     * 避免挡住页面本身的滚动。
+     */
+    function onTabsWheel(event) {
+      const el = event.currentTarget;
+      if (el.scrollWidth <= el.clientWidth) return;
+      if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+        el.scrollLeft += event.deltaY;
+        event.preventDefault();
+      }
+    }
+
     function ddwbClampWidth(width) {
       if (typeof width !== "number" || !Number.isFinite(width)) {
         return ddwbLayoutWidthDefault;
@@ -115,25 +129,26 @@ window.__ModuleLoader__.load({
     // 不占头部空间，也不与 tabs 行争位置。
     const css =
       ".ddwb_col{border-left:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);flex-direction:column;min-width:0;height:100%;display:flex;position:relative}" +
-      // 水平 padding 收窄到 8px 对称：官方 20/28 是给 titleRow 的面包屑与
-      // utilities 留的空间，本列第一行是隐形占位、无这些内容，无需照抄。
+      // 左 padding 取官方值 20px：标题行与页签行都落在与官方主列内容
+      // 相同的左边缘（20px）；右侧收窄到 8px（本列无 breadcrumb/utilities，
+      // 右端只有关闭按钮，无需官方 28px）。
       // （tab 顶 48px 与官方页签对齐由垂直结构保证，不受水平 padding 影响）
-      ".ddwb_header{border-bottom:1px solid #0000;flex:none;position:relative;padding:12px 8px 0 8px;-webkit-app-region:drag}" +
+      ".ddwb_header{border-bottom:1px solid #0000;flex:none;position:relative;padding:12px 8px 0 20px;-webkit-app-region:drag}" +
       ".ddwb_header:after{content:\"\";z-index:0;background:var(--dsw-alias-border-l2);pointer-events:none;height:1px;position:absolute;bottom:1px;left:0;right:0}" +
       // 第一行标题：官方 crumb 同款节奏（14px/500），撑出行高的同时
-      // 让 0–32px 区域有内容；padding-left 28px 对齐下方第一个 tab。
-      ".ddwb_titleRow{min-height:32px;align-items:center;gap:10px;padding-left:28px;display:flex}" +
+      // 让 0–32px 区域有内容；左 padding 继承 header 的 20px，
+      // 与下方第一个 tab 及官方主列左边缘对齐。
+      ".ddwb_titleRow{min-height:32px;align-items:center;gap:10px;display:flex}" +
       ".ddwb_title{white-space:nowrap;font-size:14px;font-weight:500;line-height:20px;color:var(--dsw-alias-label-secondary)}" +
       ".ddwb_tabsRow{flex:1;min-width:0;z-index:1;position:relative;margin-top:4px;display:flex;align-items:flex-end;gap:6px}" +
       ".ddwb_tabs{flex:1;min-width:0;display:flex;align-items:flex-end;gap:16px;overflow-x:auto;scrollbar-width:none}" +
       ".ddwb_tabs::-webkit-scrollbar{display:none}" +
-      // 滚动按钮常驻在 tab 栏两侧的空白区（header padding 地带），
-      // 不占 tab 宽度；22px 高 + margin-bottom 8px 使箭头中心与 tab 文字
-      // 中心对齐；无溢出时 disabled 灰显。
-      ".ddwb_scrollBtn{appearance:none;flex:none;width:22px;height:22px;margin-bottom:8px;border:0;border-radius:6px;background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;-webkit-app-region:no-drag}" +
-      ".ddwb_scrollBtn:disabled{color:var(--dsw-alias-label-dimmed);cursor:default}" +
-      ".ddwb_scrollBtn:hover:not(:disabled),.ddwb_scrollBtn:focus-visible{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}" +
-      ".ddwb_tab{color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;padding:0 0 11px;font-size:13px;font-weight:500;line-height:16px;white-space:nowrap;position:relative;-webkit-app-region:no-drag}" +
+      // 右侧工具按钮（关闭工作台）：22px 高 + margin-bottom 8px 使图标
+      // 中心与 tab 文字中心对齐；位于 tab 栏右侧空白区，不占 tab 宽度。
+      ".ddwb_toolBtn{appearance:none;flex:none;width:22px;height:22px;margin-bottom:8px;border:0;border-radius:6px;background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;-webkit-app-region:no-drag}" +
+      ".ddwb_toolBtn:hover:not(:disabled),.ddwb_toolBtn:focus-visible{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}" +
+      ".ddwb_tab{color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;padding:0 0 11px;font-size:13px;font-weight:500;line-height:16px;white-space:nowrap;position:relative;display:inline-flex;align-items:center;gap:6px;-webkit-app-region:no-drag}" +
+      ".ddwb_tabIcon{display:inline-flex;color:var(--dsw-alias-label-tertiary)}" +
       ".ddwb_tab:hover:not(:disabled),.ddwb_tab:focus-visible{color:var(--dsw-alias-label-primary)}" +
       ".ddwb_tab:after{content:\"\";background:0 0;border-radius:2px;height:2px;position:absolute;bottom:1px;left:0;right:0}" +
       ".ddwb_tabActive{color:var(--dsw-alias-label-primary)}" +
@@ -286,6 +301,10 @@ window.__ModuleLoader__.load({
         closeFile() {
           dispatchAction({ type: "closeFile" });
         },
+        /** 折叠面板（外部触发，如最后一个文件页签关闭时）。 */
+        collapse() {
+          dispatchAction({ type: "collapsePanel" });
+        },
         getSnapshot: snapshot,
         subscribe(listener) {
           listeners.add(listener);
@@ -297,57 +316,6 @@ window.__ModuleLoader__.load({
           return () => actionHandlers.delete(handler);
         },
       };
-    }
-    //#endregion
-
-    //#region 示例组件（验证服务链路）
-    /**
-     * 示例 Tab：注册 → 服务分发 → 面板渲染 的自证链路。
-     * 功能插件接入后可按同样方式注册自己的 Tab。
-     */
-    function ExamplePanel({ service, t }) {
-      const [badge, setBadge] = react.useState(0);
-      return jsxs("div", {
-        className: "ddwb_card",
-        children: [
-          jsx("div", { className: "ddwb_cardTitle", children: t("example.heading") }),
-          jsx("p", { className: "ddwb_cardText", children: t("example.text") }),
-          jsxs("div", {
-            className: "ddwb_row",
-            children: [
-              jsx("button", {
-                type: "button",
-                className: "ddwb_btn",
-                onClick: () => service.openFile("demo.ddwb-demo"),
-                children: t("example.openFile"),
-              }),
-              jsx("button", {
-                type: "button",
-                className: "ddwb_btn",
-                onClick: () => {
-                  setBadge((value) => (value + 1) % 4);
-                  service.updateTab("workbench:example", {
-                    badge: (badge + 1) % 4,
-                  });
-                },
-                children: t("example.toggleBadge") + "（" + t("example.badgeLabel") + badge + "）",
-              }),
-            ],
-          }),
-        ],
-      });
-    }
-
-    /** 示例预览器：匹配 .ddwb-demo 扩展名。 */
-    function DemoViewer({ path, t }) {
-      return jsxs("div", {
-        className: "ddwb_card",
-        children: [
-          jsx("div", { className: "ddwb_cardTitle", children: t("demo.heading") }),
-          jsx("p", { className: "ddwb_cardText", children: t("demo.text") }),
-          jsx("div", { className: "ddwb_code", children: path }),
-        ],
-      });
     }
     //#endregion
 
@@ -489,8 +457,9 @@ window.__ModuleLoader__.load({
 
     function WorkbenchColumn({ ctx, service, t }) {
       const [snap, setSnap] = react.useState(() => service.getSnapshot());
-      // 默认关闭：新会话首次出现时只显示右侧细条；已有会话按保存的布局
-      // 恢复（applyLayout 会用 saved.open 覆盖）。
+      // 默认关闭：新会话加载时工作台保持收起（不恢复上次的开合状态——
+      // 会话加载时面板组件不挂载，避免各功能插件初始化竞态；用户在当前
+      // 会话内的开合/宽度选择仍实时持久化）。
       const [layout, setLayout] = react.useState({
         open: false,
         width: ddwbLayoutWidthDefault,
@@ -503,33 +472,17 @@ window.__ModuleLoader__.load({
       const currentIdRef = react.useRef(null);
       /** 左边缘把手拖拽状态：起点 X / 起始宽度 / 是否已产生位移。 */
       const dragRef = react.useRef(null);
-      /** tab 栏滚动：容器引用 + 两端是否可滚动（溢出时显示 ‹ › 按钮）。 */
+      /** tab 栏引用：绑定滚轮横向滚动（无滚动条，直接滚动）。 */
       const tabsRef = react.useRef(null);
-      const [tabsScroll, setTabsScroll] = react.useState({ left: false, right: false });
-
-      // 检测 tab 栏是否可滚动（内容溢出）。
-      const updateTabsScroll = () => {
-        const el = tabsRef.current;
-        if (el === null) return;
-        setTabsScroll({
-          left: el.scrollLeft > 0,
-          right: el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
-        });
-      };
-      // tab 数量 / 列宽 / 窗口尺寸变化后重新检测溢出（rAF 确保布局已收敛）。
-      react.useEffect(() => {
-        const frame = requestAnimationFrame(updateTabsScroll);
-        window.addEventListener("resize", updateTabsScroll);
-        return () => {
-          cancelAnimationFrame(frame);
-          window.removeEventListener("resize", updateTabsScroll);
-        };
-      }, [snap.tabs.length, layout.width, layout.open]);
-      /** 点击箭头滚动 tab 栏。 */
-      const scrollTabs = (direction) => {
-        const el = tabsRef.current;
-        if (el === null) return;
-        el.scrollBy({ left: direction * 160, behavior: "smooth" });
+      const setTabsRef = (el) => {
+        if (tabsRef.current === el) return;
+        if (tabsRef.current !== null) {
+          tabsRef.current.removeEventListener("wheel", onTabsWheel);
+        }
+        tabsRef.current = el;
+        if (el !== null) {
+          el.addEventListener("wheel", onTabsWheel, { passive: false });
+        }
       };
 
       // 注册表快照订阅。
@@ -540,7 +493,15 @@ window.__ModuleLoader__.load({
         () =>
           service.onAction((action) => {
             if (action.type === "activateTab") {
-              setLayout((prev) => ({ ...prev, activeTabId: action.id, file: null }));
+              // 激活页签的同时打开面板：外部触发（如点击对话里的文件
+              // 链接 → openPath 拦截）时工作台可能处于关闭状态，
+              // 需要自动弹出让预览可见。
+              setLayout((prev) => ({
+                ...prev,
+                open: true,
+                activeTabId: action.id,
+                file: null,
+              }));
             } else if (action.type === "openFile") {
               setLayout((prev) => ({
                 ...prev,
@@ -549,6 +510,10 @@ window.__ModuleLoader__.load({
               }));
             } else if (action.type === "closeFile") {
               setLayout((prev) => ({ ...prev, file: null }));
+            } else if (action.type === "collapsePanel") {
+              // 外部请求折叠（如最后一个文件页签关闭）：收起面板，
+              // 轨道归 0 由 layout 同步 effect 处理。
+              setLayout((prev) => ({ ...prev, open: false }));
             }
           }),
         [service],
@@ -575,8 +540,9 @@ window.__ModuleLoader__.load({
                   ? body.layout
                   : null;
               setLayout((prev) => ({
-                open:
-                  saved && typeof saved.open === "boolean" ? saved.open : prev.open,
+                // 会话加载一律默认收起（避免面板组件在会话/服务未就绪时
+                // 挂载导致插件初始化问题）；宽度与活动页签仍按上次记忆。
+                open: false,
                 width: ddwbClampWidth(saved?.width ?? prev.width),
                 activeTabId:
                   saved && typeof saved.activeTabId === "string"
@@ -844,23 +810,9 @@ window.__ModuleLoader__.load({
               jsxs("div", {
                 className: "ddwb_tabsRow",
                 children: [
-                  // 左滚动按钮：常驻 tab 栏左侧空白区，无溢出时灰显禁用。
-                  jsx("button", {
-                    type: "button",
-                    className: "ddwb_scrollBtn",
-                    disabled: !tabsScroll.left,
-                    "aria-label": t("scrollTabsLeft"),
-                    title: t("scrollTabsLeft"),
-                    onClick: () => scrollTabs(-1),
-                    children: jsx(IconChevronLeftOutline14, {
-                      size: 14,
-                      "aria-hidden": true,
-                    }),
-                  }),
                   jsxs("div", {
                     className: "ddwb_tabs",
-                    ref: tabsRef,
-                    onScroll: updateTabsScroll,
+                    ref: setTabsRef,
                     children: snap.tabs.map((tab) =>
                       jsxs(
                         "button",
@@ -873,6 +825,15 @@ window.__ModuleLoader__.load({
                           onClick: () => service.activateTab(tab.id),
                           title: tab.title,
                           children: [
+                            typeof tab.icon === "function"
+                              ? jsx("span", {
+                                  className: "ddwb_tabIcon",
+                                  children: jsx(tab.icon, {
+                                    size: 14,
+                                    "aria-hidden": true,
+                                  }),
+                                })
+                              : null,
                             typeof tab.title === "string" ? tab.title : tab.id,
                             typeof tab.badge === "number" && tab.badge > 0
                               ? jsx("span", {
@@ -886,14 +847,14 @@ window.__ModuleLoader__.load({
                       ),
                     ),
                   }),
-                  // 右滚动按钮：常驻 tab 栏右侧空白区，无溢出时灰显禁用。
+                  // 右侧工具按钮：关闭工作台（收起面板，轨道归 0）。
                   jsx("button", {
                     type: "button",
-                    className: "ddwb_scrollBtn",
-                    disabled: !tabsScroll.right,
-                    "aria-label": t("scrollTabsRight"),
-                    title: t("scrollTabsRight"),
-                    onClick: () => scrollTabs(1),
+                    className: "ddwb_toolBtn",
+                    "aria-label": t("closePanel"),
+                    title: t("closePanel"),
+                    onClick: () =>
+                      setLayout((prev) => ({ ...prev, open: false })),
                     children: jsx(IconChevronRightOutline14, {
                       size: 14,
                       "aria-hidden": true,
@@ -928,88 +889,6 @@ window.__ModuleLoader__.load({
       disposers.push(() => {
         root.unmount();
       });
-      disposers.push(
-        service.registerTab({
-          id: "workbench:example",
-          title: t("example.title"),
-          order: 100,
-          component: ExamplePanel,
-        }),
-      );
-      // 多个占位页签：演示 tab 栏切换效果，同时预览未来功能插件的布局
-      // （文件 / 终端 / 任务）。功能插件落地后这些占位页会被替换。
-      disposers.push(
-        service.registerTab({
-          id: "workbench:demo-file",
-          title: t("demo.file.title"),
-          order: 110,
-          component: (props) =>
-            jsxs("div", {
-              className: "ddwb_card",
-              children: [
-                jsx("div", {
-                  className: "ddwb_cardTitle",
-                  children: t("demo.file.title"),
-                }),
-                jsx("p", {
-                  className: "ddwb_cardText",
-                  children: t("demo.file.text"),
-                }),
-              ],
-            }),
-        }),
-      );
-      disposers.push(
-        service.registerTab({
-          id: "workbench:demo-terminal",
-          title: t("demo.terminal.title"),
-          order: 120,
-          component: (props) =>
-            jsxs("div", {
-              className: "ddwb_card",
-              children: [
-                jsx("div", {
-                  className: "ddwb_cardTitle",
-                  children: t("demo.terminal.title"),
-                }),
-                jsx("p", {
-                  className: "ddwb_cardText",
-                  children: t("demo.terminal.text"),
-                }),
-              ],
-            }),
-        }),
-      );
-      disposers.push(
-        service.registerTab({
-          id: "workbench:demo-tasks",
-          title: t("demo.tasks.title"),
-          order: 130,
-          component: (props) =>
-            jsxs("div", {
-              className: "ddwb_card",
-              children: [
-                jsx("div", {
-                  className: "ddwb_cardTitle",
-                  children: t("demo.tasks.title"),
-                }),
-                jsx("p", {
-                  className: "ddwb_cardText",
-                  children: t("demo.tasks.text"),
-                }),
-              ],
-            }),
-        }),
-      );
-      disposers.push(
-        service.registerViewer({
-          id: "workbench:demo",
-          title: t("demo.title"),
-          extensions: [".ddwb-demo"],
-          order: 100,
-          component: DemoViewer,
-        }),
-      );
 
       // 接入 AppFrame grid：frame 可能晚于插件出现，重试直至挂上。
       // dispose 必须终止重试：否则已卸载的列会在后续 attach 时被“复活”，
@@ -1052,27 +931,9 @@ window.__ModuleLoader__.load({
       "feature.title": "工作台框架",
       "feature.description": "右侧分栏工作台容器与面板布局，文件 / 终端 / Git 等功能的宿主",
       "panel.title": "工作台",
-      "example.title": "示例",
-      "example.heading": "框架已就绪",
-      "example.text":
-        "这是 dsh-desktop-workbench 自带的示例标签页，用于验证「注册 Tab → 服务分发 → 面板渲染」链路。功能插件接入后，它们的标签页会出现在列顶页签栏。",
-      "example.openFile": "打开示例文件（.ddwb-demo）",
-      "example.toggleBadge": "切换角标",
-      "example.badgeLabel": "当前角标",
-      "demo.title": "示例预览",
-      "demo.heading": "示例预览器",
-      "demo.text": "匹配到预览器，文件路径：",
-      "demo.file.title": "示例 · 文件",
-      "demo.file.text": "占位页签：未来由 dsh-desktop-files 插件提供目录树、代码查看与图片 / Markdown 预览。",
-      "demo.terminal.title": "示例 · 终端",
-      "demo.terminal.text": "占位页签：未来由 dsh-desktop-terminal 插件提供 xterm.js 真实终端。",
-      "demo.tasks.title": "示例 · 任务",
-      "demo.tasks.text": "占位页签：未来由 dsh-desktop-tasks 插件提供 subagent 拓扑与后台任务。",
       "openPanel": "打开工作台",
-      "closePanel": "收起工作台",
+      "closePanel": "关闭工作台",
       "resizePanel": "拖拽调整宽度，点击收起",
-      "scrollTabsLeft": "向左滚动页签",
-      "scrollTabsRight": "向右滚动页签",
       "emptyTitle": "工作台为空",
       "emptyHint": "功能插件（文件 / 终端 / Git）安装后，它们的标签页会出现在这里",
       "noViewerTitle": "无法预览此文件",
@@ -1083,27 +944,9 @@ window.__ModuleLoader__.load({
       "feature.description":
         "Right-column workbench container and panel layout; host for the Files / Terminal / Git features",
       "panel.title": "Workbench",
-      "example.title": "Example",
-      "example.heading": "Framework ready",
-      "example.text":
-        "This is the built-in example tab of dsh-desktop-workbench, verifying the register-tab → dispatch → render chain. Feature plugins appear in the column's tab bar above.",
-      "example.openFile": "Open sample file (.ddwb-demo)",
-      "example.toggleBadge": "Toggle badge",
-      "example.badgeLabel": "Badge",
-      "demo.title": "Sample preview",
-      "demo.heading": "Sample viewer",
-      "demo.text": "Viewer matched, file path:",
-      "demo.file.title": "Sample · Files",
-      "demo.file.text": "Placeholder tab: the dsh-desktop-files plugin will provide the file tree, code view and image / Markdown previews.",
-      "demo.terminal.title": "Sample · Terminal",
-      "demo.terminal.text": "Placeholder tab: the dsh-desktop-terminal plugin will provide a real xterm.js terminal.",
-      "demo.tasks.title": "Sample · Tasks",
-      "demo.tasks.text": "Placeholder tab: the dsh-desktop-tasks plugin will provide subagent topology and background jobs.",
       "openPanel": "Open workbench",
-      "closePanel": "Collapse workbench",
+      "closePanel": "Close workbench",
       "resizePanel": "Drag to resize, click to collapse",
-      "scrollTabsLeft": "Scroll tabs left",
-      "scrollTabsRight": "Scroll tabs right",
       "emptyTitle": "Workbench is empty",
       "emptyHint":
         "Feature plugins (Files / Terminal / Git) will appear here once installed",

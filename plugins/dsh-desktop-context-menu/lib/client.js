@@ -609,10 +609,15 @@ window.__ModuleLoader__.load({
                     return match === void 0 ? void 0 : match.path;
                   },
                   openWorkspacePath: (path) => {
+                    // better-sidebar 同款方式：直接走官方 workspaces.openPath
+                    // （files 插件的包装会放行目录并保留 this 调用官方实现）。
                     const workspaces = ctx.get("workspaces");
                     if (workspaces === void 0) return;
                     workspaces.openPath(path).catch(() => {
-                      showDesktopToast("error", t("openWorkspace.error"));
+                      showDesktopToast(
+                        "error",
+                        t("openWorkspace.error") + " (openPath)",
+                      );
                     });
                   },
                 }),

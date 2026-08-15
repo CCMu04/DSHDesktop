@@ -37,28 +37,34 @@ better-sidebar 把「侧边栏框架 + 7 个 Tab + 6 种文件预览器」塞进
 - **服务**：`ctx.provide('desktop.workbench', service)`，消费方 `inject: ['desktop.workbench']`：
 
 ```js
-service.registerTab({ id, title, order, component, badge })  // 注册面板页，返回 disposer
+service.registerTab({ id, title, order, component, badge })  // 注册面板页（主页签），返回 disposer
 service.registerViewer({ id, title, order, extensions, component })  // 注册预览器，返回 disposer
-service.activateTab(id)     // 激活 tab（已知 id 才分发；打开的文件会关闭）
+service.activateTab(id)     // 激活功能 tab（已知 id 才分发）
 service.updateTab(id, patch) // 原位更新 tab 描述（如角标）
-service.openFile(path)      // 按扩展名匹配第一个 viewer，未匹配 viewerId 为 null
-service.closeFile()         // 关闭当前文件，回到 tab 视图
+service.openFile(path)      // 请求打开文件（路由到匹配 viewer；由功能插件决定如何呈现）
+service.closeFile(path)     // 关闭文件（未匹配为安全 no-op）
 service.getSnapshot()       // { tabs, viewers }（按 order 排序）
 service.subscribe(listener) / service.onAction(handler)  // 均返回 disposer
 ```
+
+- **主页签栏只承载功能页签**（文件 / 终端 / Git / 浏览器 / 任务，由各功能插件注册；框架自身不内置任何页签）。打开的文件**不在主页签栏显示**——由功能插件在自己的页签内容区内实现子页签（如 files 插件的文件子页签分页预览）。`openFile` / `registerViewer` 为对外契约（供未来生态使用），当前 files 插件在内部实现文件预览，不占用主页签。
 
 - **host**：`/api/desktop-workbench/config`（框架总开关，走 §4 通用约定）+ `/api/desktop-workbench/layout`（GET/POST 会话布局持久化到 `$DSH_HOME/desktop-workbench.json`，与开关共用同一文件、原子写入；宽度钳制 240–720、每会话布局 ≤ 32 KiB、最多 200 个会话）。
 - Tab 组件渲染时收到 `{ ctx, service, t }`，viewer 组件收到 `{ path, t }`；`t` 为工作台词典的翻译函数。
 
 ### 3.2 dsh-desktop-files（文件工作台）
 
-- **host**（前缀路由，全部按会话 cwd 白名单 + 信任围栏校验，拒绝越界路径）：
-  - `/api/desktop-files/tree`：懒加载目录树（忽略 node_modules/.git/缓存等，同 better-sidebar 的忽略清单）
-  - `/api/desktop-files/text`：文本读取（大小上限 2 MiB）/ 写入（原子写，仅限会话 cwd）
-  - `/api/desktop-files/file`：媒体文件（图片 ≤ 10 MiB）
-  - `/api/desktop-files/html`：HTML 预览（CSP `sandbox` + 大小/路径边界）
-- **client**：向 workbench 注册 `files` tab（目录树 + 文件行 @引用按钮 + 右键复制相对/绝对路径）与 viewers（图片 / Markdown / HTML / PDF / 代码）。
-- 桌面端差异：文件即本机文件（与官方 fs 工具同一套文件系统）；「在文件管理器中显示」复用桌面 runtime-preload 的 `Invoke-Item` 打开器；Office 预览不做（留给生态插件）。
+> ✅ 已实现（`plugins/dsh-desktop-files/`）。功能增强卡片 order 10，主页签 order 10。
+
+- **host**（`inject: ["webServer", "sessions"]`，全部按会话 cwd 白名单 + realpath 校验，拒绝越界/符号链接逃逸）：
+  - `/api/desktop-files/tree`：懒加载目录树（忽略依赖/缓存/构建/版本库/IDE 目录与隐藏条目，目录在前按名称排序，单层 ≤ 1000 条）
+  - `/api/desktop-files/text`：文本读取/原子写入（大小上限 2 MiB，扩展名白名单）
+  - `/api/desktop-files/file`：媒体文件（图片/PDF，≤ 10 MiB，类型白名单，`nosniff`）
+  - `/api/desktop-files/html`：HTML 预览（≤ 1 MiB，响应带 CSP `sandbox; script-src 'none'` + `nosniff`）
+  - 会话 cwd 取自 host 端 `ctx.sessions.get(id).header.cwd`；无会话/无 cwd 时拒绝（400）
+- **client（文件页签内部 = 分页预览）**：向 workbench 注册 `files` 主页签。页签内容自上而下：工具栏（cwd + 目录树折叠/展开 + 刷新）→ 目录树（可折叠，懒加载，右键复制路径）→ **文件子页签栏**（打开的文件，同路径去重、标题为文件名、单个 × 关闭、激活相邻页签，≤ 20 个，插件内模块级 store 维护）→ 预览区（图片 / Markdown / HTML / PDF / 代码，插件内部按扩展名匹配渲染，不占用主页签栏）。
+- **openPath 拦截**：包装官方唯一文件打开入口 `ctx.workspaces.openPath`（工具行路径 / 生成文件行 / 正文文件提及的打开都走它）——相对路径按会话 cwd 解析 → 打开文件子页签并 `activateTab('files')`，不再交给宿主 OS；dispose 时还原原始方法（链式包装安全）。
+- 桌面端差异：文件即本机文件（与官方 fs 工具同一套文件系统）；Office 预览不做（留给生态插件）；「在文件管理器中显示」暂未实现（右键复制路径可代替）。
 
 ### 3.3 dsh-desktop-terminal（终端）
 
@@ -66,10 +72,10 @@ service.subscribe(listener) / service.onAction(handler)  // 均返回 disposer
 - **client**：xterm.js 终端视图，注册 `terminal` tab；拖到另一分栏重挂载（shell 重开）为已知限制。
 - 桌面端差异：默认 shell 为 PowerShell（桌面端主环境）；node-pty 用运行时自带版本（runtime 已内置 1.1.0 预编译产物），不新增 npm 运行时依赖。
 
-### 3.4 dsh-desktop-git（Git 面板）
+### 3.4 dsh-desktop-git（Git 面板）✅ 已落地
 
-- **host**：`/api/desktop-git/*`（status / diff / log / stage / commit / restore），只调 git CLI、绝不设置身份、无 push/pull/fetch（安全边界与 better-sidebar 相同）；工作区目录校验（必须位于当前会话 cwd 内）。
-- **client**：注册 `git` tab：工作区/暂存区文件列表 + VSCode 式 diff 视图 + 历史 + 右键暂存/提交/还原；快捷键 Ctrl+Enter 提交。
+- **host**：`/api/desktop-git/*`（repos / status / diff / log / stage / unstage / commit / restore），只调 git CLI、绝不设置身份、无 push/pull/fetch（安全边界与 better-sidebar 相同）；工作区目录校验（必须位于当前会话 cwd 内）；`repo` 参数可在会话 cwd 内选择任意 git 仓库（`repos` 扫描 cwd 深度 ≤ 3 的子仓库）；diff 上限 256 KiB（截断标记），git 命令 15s 超时。
+- **client**：注册 `git` tab（order 30）：顶部仓库下拉（自动列出 cwd 内子仓库，切换即重载）+ 分支名 + 暂存区/工作区文件分组列表（状态徽标 + hover 暂存/取消暂存/还原）+ VSCode 式 diff 视图（行号双 gutter、增删高亮、暂存区/工作区切换、二进制提示）+ 底部提交区（Ctrl+Enter）与提交历史列表。
 - 无文件 watcher（手动刷新），同 better-sidebar。
 
 ### 3.5 dsh-desktop-browser（内嵌浏览器）
@@ -108,10 +114,10 @@ service.subscribe(listener) / service.onAction(handler)  // 均返回 disposer
 
 ## 6. 实施顺序
 
-1. ✅ **workbench**：框架 + 服务 API + 面板容器 + 示例 tab/viewer（验证服务注册链路）。下一步开始 files。
-2. **files**：目录树 + 代码查看 + 图片/Markdown 预览（核心价值闭环：点文件路径 → 面板打开）。
+1. ✅ **workbench**：框架 + 服务 API + 面板容器（主页签栏只承载功能页签，框架不内置页签）。示例页签在 files 落地后已移除。
+2. ✅ **files**：目录树 + 文件子页签分页预览（图片 / Markdown / HTML / PDF / 代码）+ openPath 拦截。
 3. **terminal**：WS + xterm + node-pty（桌面端差异化最大的一块，尽早验证）。
-4. **git**：diff / 提交（纯 CLI 代理，独立可测）。
+4. ✅ **git**：diff / 提交（纯 CLI 代理，独立可测）。
 5. **browser**：沙箱 iframe + HTML 预览。
 6. **tasks**：官方服务只读代理（工作量最小，可最后）。
 

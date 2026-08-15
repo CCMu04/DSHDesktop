@@ -30,6 +30,7 @@ plugins/dsh-desktop-<name>/
 | 视觉增强 | `dsh-desktop-ui` | 纯视觉定制（设置抽屉、会话日志导出、统计栏整宽），设置页「插件 > 视觉增强」卡片（`settings.plugin.item`，order 100） |
 | 功能增强聚合 | `dsh-desktop-features` | 「功能增强」聚合卡片（`settings.plugin.item`，order 110），声明并渲染子槽位 `desktop.features.item` |
 | 功能增强 | `dsh-desktop-updates` | 检查更新（`desktop.features.item` order 10 + 设置分区 `settings.section` order 100） |
+| 功能增强 | `dsh-desktop-files` | 文件工作台：目录树 + 图片/Markdown/HTML/PDF/代码预览（`desktop.features.item` order 10，注册 workbench `files` 页签与 5 个预览器） |
 | 功能增强 | `dsh-desktop-context-menu` | 右键菜单（`desktop.features.item` order 30） |
 | 功能增强 | `dsh-desktop-notify` | 完成提醒（`desktop.features.item` order 40） |
 
@@ -232,6 +233,24 @@ Copy-Item plugins\dsh-desktop-<name> "C:\Users\<你>\AppData\Local\Programs\Deep
 
 > 注意：新增插件时**不要**用 no-op install 的手动 `ensureBundledPlugin` 预写指纹标记，否则应用启动会认为已处理而跳过注册。新插件交给应用启动时自动部署注册即可；已注册插件的内容更新可用临时脚本（`test/redeploy-*.mjs`，用后删除）刷新指纹。
 
+### 开发期快速同步（直接改 builtin-plugins，绕过打包）
+
+日常开发改插件**不必**走 `resources\plugins\` 自动部署，可以直接覆盖运行目录（应用重启即生效）：
+
+```powershell
+# 已注册插件（如 dsh-desktop-files）的内容更新：
+Copy-Item plugins\dsh-desktop-<name>\lib "$env:APPDATA\deepseek-harness-desktop\builtin-plugins\dsh-desktop-<name>\lib" -Recurse -Force
+```
+
+- **目录关系**：`~/.dsh/profiles/web/node_modules/dsh-desktop-<name>` 是 **Junction**，指向 `%APPDATA%\deepseek-harness-desktop\builtin-plugins\dsh-desktop-<name>`（pnpm link 的落地形态）。覆盖 `node_modules` 里的文件等于写进 builtin-plugins（穿透），两条路等价。
+- **指纹过期无碍**：`builtin-plugins.json` 的指纹只在应用更新/部署时用于决定是否从安装包拷贝，日常启动**不校验、不重写**。直接覆盖内容后指纹与清单不一致，应用照样加载新代码（实测 files 指纹过期后功能正常）。
+- **新插件只放目录不加载**：绕开自动部署时，光把目录复制进 builtin-plugins 不会生效——`dsh.profile.bundles` 是静态加载清单。必须手动注册两步（`~/.dsh/profiles/web/package.json`）：
+  1. `dependencies` 加一行 `"dsh-desktop-<name>": "link:C:/Users/<你>/AppData/Roaming/deepseek-harness-desktop/builtin-plugins/dsh-desktop-<name>"`；
+  2. `dsh.profile.bundles` 数组加 `"dsh-desktop-<name>"`（放最后即可）。
+  若 `node_modules` 下尚无该包目录，手动建一个 Junction 到 builtin-plugins（等价 `dsh plugin --profile web add --offline link:<dir>`，省去跑 pnpm）。
+- **不要手改 `builtin-plugins.json`**：它是部署指纹清单（服务应用更新），新增条目时指纹算法算错会在下次应用更新时触发异常覆盖；开发期保持无条目最安全。
+- **重启后验证**：`/api/desktop-<name>/config` 返回 200（host 已加载）+ `/plugins/<id>/client.js` 返回 200（client bundle 已注册），页签/面板即可见。
+
 ## 6. 测试规范
 
 每个插件两个测试文件（`node --test`，`npm test` 运行全部）：
@@ -270,4 +289,5 @@ gh api --method PATCH repos/CCMu04/DSHDesktop/releases/tags/v0.1.0-rc.6.5.10 \
 - **订阅基线重置**：订阅服务快照后，只在关键状态变化时重建订阅，否则边缘检测失效。
 - **Windows 通知不显示**：toast 需要主进程 `app.setAppUserModelId`（`main.mjs`），缺失时 HTML5 Notification 静默失败。
 - **配置缺失缺功能**：开关读取失败必须回退默认（全开），再等真实配置收敛重装。
+- **CSS 花括号失衡**：插件 CSS 是 JS 字符串拼接，漏一个 `}` 会让浏览器把**该规则之后的所有规则**吞进未闭合声明块，表现为"样式整块丢失（白底裸排）"且只影响该插件。改完 CSS 用 `{`/`}` 计数验证配平。
 - **指纹误写**：手动部署脚本若预写 `builtin-plugins.json` 标记，会导致应用跳过真实注册。

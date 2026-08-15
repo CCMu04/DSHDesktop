@@ -2,6 +2,15 @@
 
 本文件记录 DSH Desktop 各版本的变更，新版本在上。格式固定为：版本标题（`## v<版本号> — <日期>`）+ 分类小节（新增 / 修复 / 变更 / 移除）。模板见 [docs/TEMPLATES.md](docs/TEMPLATES.md)。
 
+## v0.1.0-rc.6.5.11 — 2026-08-15
+
+新增 Git 面板功能增强：改动 / 暂存 / 提交 / 历史，VSCode 式 diff 视图。
+
+### 新增
+
+- Git 面板（`dsh-desktop-git`）：工作台新增「Git」页签（功能增强开关，order 30）。顶部显示当前分支，左侧暂存区 / 工作区文件分组列表（状态徽标 + hover 暂存 / 取消暂存 / 还原操作），点击文件在右侧查看 VSCode 式 unified diff（行号双 gutter + 增删高亮，暂存区 / 工作区视图可切换，二进制文件与超大 diff 有提示）；底部提交区（Ctrl+Enter 提交，成功 / 失败有反馈）与提交历史列表。顶部仓库下拉可切换到会话目录内的任意 git 仓库（自动扫描子目录，覆盖仓库不在工作区根目录的场景）。
+- 纯 git CLI 代理：host 端 `/api/desktop-git/*`（repos / status / diff / log / stage / unstage / commit / restore），不设置身份（提交失败时展示 git 的「请配置 user.name / user.email」提示）、无 push / pull / fetch；所有路径与仓库目录（repo 参数）经会话 cwd 白名单校验（越界 403）；无文件 watcher，手动刷新。
+
 ## v0.1.0-rc.6.5.10 — 2026-08-15
 
 完成提醒支持 AI 调起询问场景；修复列表快照频繁变化导致完成边缘被吞掉的问题。

@@ -275,15 +275,9 @@ if (variable() !== '280px minmax(0, 1fr) 0px 0px') {
   throw new Error(`grid track not appended: ${variable()}`)
 }
 let snap = service.getSnapshot()
-if (!snap.tabs.some((tab) => tab.id === 'workbench:example')) {
-  throw new Error('sample tab not registered')
-}
-// 多个占位页签：演示 tab 切换效果。
-if (snap.tabs.length < 4) {
-  throw new Error(`expected at least 4 demo tabs, got ${snap.tabs.length}`)
-}
-if (!snap.viewers.some((viewer) => viewer.id === 'workbench:demo')) {
-  throw new Error('sample viewer not registered')
+// 框架不再内置任何页签：主页签栏只显示功能插件注册的页签（当前为空）。
+if (snap.tabs.length !== 0) {
+  throw new Error(`framework should register no built-in tabs, got ${snap.tabs.length}`)
 }
 
 // --- grid self-healing ------------------------------------------------------
@@ -361,9 +355,10 @@ service.openFile('data.bin')
 if (actions[2].viewerId !== null) throw new Error('unmatched extension should route to null viewer')
 
 // updateTab mutates the descriptor and re-emits.
-service.updateTab('workbench:example', { badge: 3 })
+service.registerTab({ id: 't2', title: 'T2', order: 10, component: () => null })
+service.updateTab('t2', { badge: 3 })
 snap = service.getSnapshot()
-const sampleTab = snap.tabs.find((tab) => tab.id === 'workbench:example')
+const sampleTab = snap.tabs.find((tab) => tab.id === 't2')
 if (sampleTab?.badge !== 3) throw new Error('updateTab badge not applied')
 
 service.closeFile()
