@@ -149,6 +149,8 @@ window.__ModuleLoader__.load({
       ".ddwb_placeholderTitle{display:block;color:var(--dsw-alias-label-secondary);font-size:14px;font-weight:600;margin-bottom:4px}" +
       // Header 页签行右端的 [|] 开合按钮：与打开工作区/导出会话同排。
       ".ddwb_toggleBtn{box-sizing:border-box;min-height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:0;border-radius:6px;align-items:center;gap:4px;padding:0 8px;display:inline-flex}.ddwb_toggleBtn:hover:not(:disabled),.ddwb_toggleBtn:focus-visible{color:var(--dsw-alias-label-secondary)}.ddwb_toggleBtnActive{color:var(--dsw-alias-brand-primary)}.ddwb_toggleBtnActive:hover:not(:disabled){color:var(--dsw-alias-brand-primary)}.ddwb_toggleBtn svg{flex:none}" +
+      // 官方左面板图标水平翻转 → 「右侧面板」（工作台在对话页右侧）。
+      ".ddwb_panelRight{transform:scaleX(-1)}" +
       ".ddwb_card{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;padding:14px 16px;margin:12px}" +
       ".ddwb_cardTitle{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:600;line-height:1.4;margin-bottom:6px}" +
       ".ddwb_cardText{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.6;margin-bottom:10px}" +
@@ -888,6 +890,15 @@ window.__ModuleLoader__.load({
     //#endregion
 
     //#region Header [|] 开合按钮
+    // 官方图标库只有 IconPanelLeftOutline16（左侧面板样式）；工作台在对话页
+    // 右侧，把官方左面板图标水平翻转（scaleX(-1)）呈现「右侧面板」效果。
+    function PanelRightIcon(props) {
+      return jsx(IconPanelLeftOutline16, {
+        ...props,
+        className: "ddwb_panelRight",
+        "aria-hidden": true,
+      });
+    }
     /** 官方 Header 页签行右端的 [|] 按钮：切换工作台开合（开着时高亮）。 */
     function WorkbenchToggleHeaderAction({ workbench, t }) {
       const [open, setOpen] = react.useState(() => workbench.isOpen());
@@ -901,9 +912,8 @@ window.__ModuleLoader__.load({
         title: open ? t("closePanel") : t("openPanel"),
         "aria-label": open ? t("closePanel") : t("openPanel"),
         onClick: () => workbench.toggle(),
-        children: jsx(IconPanelLeftOutline16, {
+        children: jsx(PanelRightIcon, {
           size: 16,
-          "aria-hidden": true,
         }),
       });
     }
