@@ -42,6 +42,8 @@ const fakeElement = (className = '') => ({
   className,
   children: [],
   parentElement: null,
+  attributes: {},
+  dataset: {},
   appendChild(el) {
     this.children.push(el)
     el.parentNode = this
@@ -55,6 +57,16 @@ const fakeElement = (className = '') => ({
   },
   contains(el) {
     return this.children.includes(el)
+  },
+  querySelector(selector) {
+    const all = (el) => [el, ...el.children.flatMap(all)]
+    const node = all(this).find((c) => {
+      if (selector === 'header') return c.tag === 'HEADER'
+      if (selector === '[data-conversation-scroll]') return c.dataset.conversationScroll !== undefined
+      if (selector === '[data-slot="conversation.session.header"]') return c.dataset.slot === 'conversation.session.header'
+      return false
+    })
+    return node ?? null
   },
   classList: { add() {}, remove() {} },
   setAttribute(key, value) {
@@ -119,8 +131,8 @@ globalThis.document = {
 }
 
 // ChatView 结构：[data-chat-flow] → scroll → root（ChatView 根）。
-// 组装：scrollBody > [viewArea > root] + composerSeat（与官方一致：
-// scrollBody 是对话区外层滚动视口，含消息流槽与输入框）。
+// 组装：root[data-phase] > [headerSlot > header] + scrollBody > [viewArea > root] + composerSeat
+// （与官方一致：root 是对话页最外层，flex column：header + scrollBody）。
 const flow = fakeElement()
 flow.dataset.chatFlow = ''
 const chatScroll = fakeElement()
@@ -134,11 +146,18 @@ composerSeat.dataset.composerSeat = ''
 const viewport = fakeElement()
 viewport.clientHeight = 640
 viewport.dataset.conversationScroll = ''
-const scrollBody = fakeElement()
-scrollBody.appendChild(viewport)
 viewport.appendChild(viewArea)
 viewport.appendChild(composerSeat)
-documentBody.appendChild(scrollBody)
+const header = fakeElement()
+header.tag = 'HEADER'
+const headerSlot = fakeElement()
+headerSlot.dataset.slot = 'conversation.session.header'
+headerSlot.appendChild(header)
+const root = fakeElement('wSkVaW_root')
+root.dataset.phase = 'active'
+root.appendChild(headerSlot)
+root.appendChild(viewport)
+documentBody.appendChild(root)
 
 // --- minimal module stubs -------------------------------------------------
 function makeElement(type, props, ...children) {
@@ -298,17 +317,20 @@ if (await face.load() !== true) throw new Error('face.load should resolve true')
 // 等配置收敛（默认全开 → 真实配置到达 → 重装），再捕获当前列实例。
 await new Promise((resolve) => setTimeout(resolve, 10))
 
-// Default all-on attaches the column into the scrollBody (outer viewport)
-// as grid column 2, spanning all rows (message flow + composer).
-const column = viewport.children.find((el) => el.className === 'ddwb_col')
-if (!column) throw new Error('workbench column not attached to scrollBody')
-if (viewport.style.gridTemplateColumns !== 'minmax(0, 1fr) var(--ddwb-chat-track, 0px)') {
-  throw new Error(`scrollBody grid wrong: ${viewport.style.gridTemplateColumns}`)
+// Default all-on attaches the column into the conversation root ([data-phase])
+// as grid column 2 / row 2, beside the scrollBody (column 1).
+const column = root.children.find((el) => el.className === 'ddwb_col')
+if (!column) throw new Error('workbench column not attached to conversation root')
+if (root.style.gridTemplateColumns !== 'minmax(0, 1fr) var(--ddwb-chat-track, 0px)') {
+  throw new Error(`root grid columns wrong: ${root.style.gridTemplateColumns}`)
+}
+if (root.style.gridTemplateRows !== 'auto minmax(0, 1fr)') {
+  throw new Error(`root grid rows wrong: ${root.style.gridTemplateRows}`)
 }
 if (column.style.gridColumn !== '2') throw new Error(`column grid placement wrong: ${column.style.gridColumn}`)
-if (column.style.gridRow !== '1 / -1') throw new Error(`column grid row wrong: ${column.style.gridRow}`)
-if (column.style.position !== 'sticky') throw new Error('column should be sticky inside the scrollBody')
-if (column.style.height !== '640px') throw new Error(`column height should track the viewport: ${column.style.height}`)
+if (column.style.gridRow !== '2') throw new Error(`column grid row wrong: ${column.style.gridRow}`)
+if (header.style.gridColumn !== '1 / -1') throw new Error(`header grid span wrong: ${header.style.gridColumn}`)
+if (viewport.style.gridColumn !== '1') throw new Error(`scrollBody grid column wrong: ${viewport.style.gridColumn}`)
 if (mountedContainer !== column) throw new Error('createRoot was not called with the column')
 if (!renderedRoot || renderedRoot.type?.name !== 'WorkbenchErrorBoundary') {
   throw new Error(`column root render wrong: ${String(renderedRoot?.type)}`)
@@ -337,31 +359,31 @@ if (openStates.length < 3 || openStates[0] !== true || openStates[1] !== false |
 openOff()
 
 // --- grid self-healing ------------------------------------------------------
-// React rewrites the scrollBody children: the child observer must re-append.
+// React rewrites the root children: the child observer must re-append.
 const latestChildObserver = () => {
   const list = observers.filter((o) => o._kind === 'child')
   return list[list.length - 1]
 }
-viewport.children.length = 0
+root.children.length = 0
 latestChildObserver().callback()
-if (!viewport.children.includes(column)) {
+if (!root.children.includes(column)) {
   throw new Error('child observer did not re-attach the column')
 }
 
 // 视图切换：移除 [data-chat-flow]（切到轨迹页）→ 列本体保留（挂在
-// scrollBody 外层），轨道钳 0；重新出现 → 轨道恢复。列不销毁，
+// root 外层），轨道钳 0；重新出现 → 轨道恢复。列不销毁，
 // 因此会话切换后开关仍然可用。
 const latestFlowObserver = () => {
   const list = observers.filter((o) => o._kind === 'flow')
   return list[list.length - 1]
 }
-const trackVar = () => viewport.style['--ddwb-chat-track']
+const trackVar = () => root.style['--ddwb-chat-track']
 // 模拟 ChatView 卸载：把 flow 从滚动容器摘除。
 chatScroll.children.length = 0
 flow.parentElement = null
 latestFlowObserver().callback()
-if (!viewport.children.includes(column)) {
-  throw new Error('column should stay attached to scrollBody when chat view unmounts')
+if (!root.children.includes(column)) {
+  throw new Error('column should stay attached to root when chat view unmounts')
 }
 if (trackVar() !== '0px') {
   throw new Error(`track should clamp to 0 when chat view unmounts: ${trackVar()}`)
@@ -369,12 +391,40 @@ if (trackVar() !== '0px') {
 // 重新挂载：flow 回来 → 轨道恢复。
 chatScroll.appendChild(flow)
 latestFlowObserver().callback()
-if (!viewport.children.includes(column)) {
+if (!root.children.includes(column)) {
   throw new Error('column should stay attached when chat view remounts')
 }
-if (viewport.style.gridTemplateColumns !== 'minmax(0, 1fr) var(--ddwb-chat-track, 0px)') {
-  throw new Error(`grid template lost after remount: ${viewport.style.gridTemplateColumns}`)
+if (root.style.gridTemplateColumns !== 'minmax(0, 1fr) var(--ddwb-chat-track, 0px)') {
+  throw new Error(`grid template lost after remount: ${root.style.gridTemplateColumns}`)
 }
+
+// 会话切换：root 整棵重建（新 root 节点）→ 观察器检测宿主变化并重挂。
+const latestFlowObserverForRebuild = () => {
+  const list = observers.filter((o) => o._kind === 'flow')
+  return list[list.length - 1]
+}
+// 模拟会话切换：旧 root 从文档摘除，新 root 挂上（新节点、同结构）。
+root.remove()
+const root2 = fakeElement('wSkVaW_root')
+root2.dataset.phase = 'active'
+root2.appendChild(headerSlot)
+root2.appendChild(viewport)
+documentBody.appendChild(root2)
+latestFlowObserverForRebuild().callback()
+const column2 = root2.children.find((el) => el.className === 'ddwb_col')
+if (!column2) throw new Error('column should re-attach after conversation root rebuild (session switch)')
+if (root2.style.gridTemplateColumns !== 'minmax(0, 1fr) var(--ddwb-chat-track, 0px)') {
+  throw new Error(`grid template lost after root rebuild: ${root2.style.gridTemplateColumns}`)
+}
+// 重建后 toggle 仍可用（open 状态保留在服务里）。
+if (service.isOpen() !== true) throw new Error('open state should survive root rebuild')
+const openStates2 = []
+const openOff2 = service.onOpenChange((value) => openStates2.push(value))
+service.toggle()
+if (service.isOpen() !== false) throw new Error('toggle should close after root rebuild')
+service.toggle()
+if (service.isOpen() !== true) throw new Error('toggle should reopen after root rebuild')
+openOff2()
 
 // --- service registry behavior ---------------------------------------------
 // registerTab / duplicate guard / disposer.
@@ -440,13 +490,13 @@ collapseOff()
 
 // --- disabled config converges to no column / no toggle ---------------------
 await new Promise((resolve) => setTimeout(resolve, 10))
-if (!viewport.children.includes(column)) throw new Error('enabled config should keep the column attached')
+if (!root2.children.includes(column2)) throw new Error('enabled config should keep the column attached')
 
 // A fresh page (reload path) with the framework disabled must not attach.
 servedConfig = { enabled: false }
 loaded.length = 0
 registered.length = 0
-viewport.children.length = 0
+root2.children.length = 0
 headStyles.length = 0
 renderedRoot = null
 mountedContainer = null
@@ -455,7 +505,7 @@ const freshEntry = loaded[0]
 const freshExports = freshEntry.factory(requireStub)
 freshExports.apply(ctx)
 await new Promise((resolve) => setTimeout(resolve, 10))
-if (viewport.children.some((el) => el.className === 'ddwb_col')) {
+if (root2.children.some((el) => el.className === 'ddwb_col')) {
   throw new Error('disabled config should attach no column')
 }
 if (registered.some((r) => r.entry.options?.id === 'workbench-toggle')) {

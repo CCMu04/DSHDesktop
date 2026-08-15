@@ -126,7 +126,10 @@ window.__ModuleLoader__.load({
     // 不与官方页签行对齐；列高度由 JS 钉在滚动视口内，内容区自行滚动。
     // 打开/关闭由官方 Header 页签行右端的 [|] 按钮控制，无右侧细条按钮。
     const css =
-      ".ddwb_col{border-left:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);flex-direction:column;min-width:0;display:flex;position:relative;overflow:hidden}" +
+      ".ddwb_col{border-left:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);flex-direction:column;min-width:0;min-height:0;display:flex;position:relative;overflow:hidden}" +
+      // 拖拽调宽期间禁用对话页根的布局过渡（不跟手根因：官方 root 可能有
+      // grid-template-columns transition，每帧改宽度被动画拖着走）。
+      "[data-phase][data-ddwb-dragging]{transition:none!important}" +
       ".ddwb_header{border-bottom:1px solid var(--dsw-alias-border-l2);flex:none;position:relative;padding:4px 6px 0 10px}" +
       ".ddwb_tabsRow{flex:1;min-width:0;z-index:1;position:relative;display:flex;align-items:flex-end;gap:6px}" +
       ".ddwb_tabs{flex:1;min-width:0;display:flex;align-items:flex-end;gap:14px;overflow-x:auto;scrollbar-width:none}" +
@@ -336,13 +339,14 @@ window.__ModuleLoader__.load({
 
     //#region 对话区 grid 集成
     /**
-     * 找到对话区滚动视口容器（[data-conversation-scroll]，ConversationRoot 的
-     * scrollBody——对话页外层容器，包含消息流（conversation.session 槽）与
-     * 输入框（composerSeat））。页面核心 bundle 可能晚于插件加载，调用方负责重试。
+     * 找到对话页根容器（[data-phase]，ConversationRoot 根）：对话页最外层
+     * 容器，flex column（header + scrollBody）。页面核心 bundle 可能晚于
+     * 插件加载，调用方负责重试。
      */
-    function findScrollBody() {
+    function findRoot() {
       try {
-        return document.querySelector('[data-conversation-scroll]');
+        const scrollBody = document.querySelector('[data-conversation-scroll]');
+        return scrollBody?.parentElement ?? null;
       } catch {
         return null;
       }
@@ -372,54 +376,71 @@ window.__ModuleLoader__.load({
      *     [data-chat-flow] 消失时把轨道钳 0（隐藏），重新出现时恢复。
      * 返回 { setTrack(width), dispose }。
      */
-    function attachToScrollBody(scrollBody, column) {
+    function attachToRoot(root, column) {
       const WIDTH_VAR = "--ddwb-chat-track";
       const observers = [];
       let lastWidth = 0;
-      let lastHeight = 0;
+      const headerSlot = root.querySelector(
+        '[data-slot="conversation.session.header"]',
+      );
+      const header = headerSlot?.querySelector('header') ?? null;
+      const scrollBody = root.querySelector('[data-conversation-scroll]');
       const applyTrack = () => {
-        column.style.gridColumn = "2";
-        column.style.gridRow = "1 / -1";
-        column.style.alignSelf = "start";
-        // sticky：消息流滚动时工作台列钉在视口顶部。
-        column.style.position = "sticky";
-        column.style.top = "0";
-        scrollBody.style.setProperty(WIDTH_VAR, String(lastWidth) + "px");
-        // grid 分栏：左列 = 官方内容，右列 = 工作台（官方 scrollBody 是
-        // flex column，覆盖为 grid 后原内容仍按顺序落第一列）。
-        scrollBody.style.display = "grid";
-        scrollBody.style.gridTemplateColumns =
+        root.style.setProperty(WIDTH_VAR, String(lastWidth) + "px");
+        // 根 grid 化：两行（header / 内容区），内容区两列（聊天 / 工作台）。
+        root.style.display = "grid";
+        root.style.gridTemplateRows = "auto minmax(0, 1fr)";
+        root.style.gridTemplateColumns =
           "minmax(0, 1fr) var(--ddwb-chat-track, 0px)";
+        if (header !== null) {
+          header.style.gridColumn = "1 / -1";
+          header.style.gridRow = "1";
+          header.style.minWidth = "0";
+        }
+        if (scrollBody !== null) {
+          scrollBody.style.gridColumn = "1";
+          scrollBody.style.gridRow = "2";
+          scrollBody.style.minWidth = "0";
+        }
+        column.style.gridColumn = "2";
+        column.style.gridRow = "2";
+        column.style.minWidth = "0";
+        // 列高 = 内容行高 = scrollBody 视口高度（grid stretch，无需显式 height）。
+        column.style.alignSelf = "stretch";
       };
       applyTrack();
-      const syncHeight = () => {
-        const height = scrollBody.clientHeight;
-        if (height === lastHeight) return;
-        lastHeight = height;
-        if (height > 0) column.style.height = height + "px";
-      };
-      syncHeight();
-      const resizeObserver = new ResizeObserver(() => {
-        syncHeight();
-      });
-      resizeObserver.observe(scrollBody);
-      observers.push(resizeObserver);
       // React 重渲染可能摘掉列，childList 观察器自愈重挂。
       const childObserver = new MutationObserver(() => {
-        if (!scrollBody.contains(column)) scrollBody.appendChild(column);
+        if (!root.contains(column)) root.appendChild(column);
       });
-      childObserver.observe(scrollBody, { childList: true });
+      childObserver.observe(root, { childList: true });
       observers.push(childObserver);
       return {
+        host: root,
         setTrack(width) {
           lastWidth = Math.max(0, Math.round(width));
           applyTrack();
         },
+        setDragging(on) {
+          if (on) root.setAttribute("data-ddwb-dragging", "");
+          else root.removeAttribute("data-ddwb-dragging");
+        },
         dispose() {
           for (const observer of observers) observer.disconnect();
-          scrollBody.style.removeProperty(WIDTH_VAR);
-          scrollBody.style.removeProperty("display");
-          scrollBody.style.removeProperty("grid-template-columns");
+          root.style.removeProperty(WIDTH_VAR);
+          root.style.removeProperty("display");
+          root.style.removeProperty("grid-template-rows");
+          root.style.removeProperty("grid-template-columns");
+          if (header !== null) {
+            header.style.removeProperty("grid-column");
+            header.style.removeProperty("grid-row");
+            header.style.removeProperty("min-width");
+          }
+          if (scrollBody !== null) {
+            scrollBody.style.removeProperty("grid-column");
+            scrollBody.style.removeProperty("grid-row");
+            scrollBody.style.removeProperty("min-width");
+          }
           column.remove();
         },
       };
@@ -433,7 +454,7 @@ window.__ModuleLoader__.load({
      * 开合状态由服务持有（Header [|] 按钮切换），列渲染与否由宽度决定。
      */
     /** installDock 与列组件之间的桥：列节点、轨道 setter、当前轨道宽度。 */
-    const ddwbBridge = { node: null, setTrack: null, trackWidth: 0 };
+    const ddwbBridge = { node: null, setTrack: null, setDragging: null, trackWidth: 0 };
 
     /**
      * 列内错误边界：任何渲染错误显示占位文本而不是死空白，
@@ -689,6 +710,10 @@ window.__ModuleLoader__.load({
             onPointerDown: (event) => {
               event.preventDefault();
               event.currentTarget.setPointerCapture(event.pointerId);
+              // 拖拽期间禁用对话页根的 grid 过渡，列宽才跟手。
+              if (typeof ddwbBridge.setDragging === "function") {
+                ddwbBridge.setDragging(true);
+              }
               dragRef.current = {
                 startX: event.clientX,
                 startWidth: layoutRef.current.width,
@@ -735,6 +760,9 @@ window.__ModuleLoader__.load({
               }
               if (event.currentTarget.hasPointerCapture(event.pointerId)) {
                 event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+              if (typeof ddwbBridge.setDragging === "function") {
+                ddwbBridge.setDragging(false);
               }
               if (drag.moved) {
                 if (drag.rawWidth < ddwbCollapseWidth) {
@@ -817,7 +845,7 @@ window.__ModuleLoader__.load({
       });
     }
 
-    /** 挂载工作台列（对话页右侧分栏）；返回 disposer。 */
+    /** 挂载工作台列（对话页根内右侧分栏，与 scrollBody 平级）；返回 disposer。 */
     function installDock(ctx, service, t) {
       const disposers = [];
       const column = document.createElement("div");
@@ -836,21 +864,27 @@ window.__ModuleLoader__.load({
         root.unmount();
       });
 
-      // 接入对话区 scrollBody：页面可能晚于插件出现（页面加载 / 会话切换），
-      // 用 MutationObserver 跟随 [data-conversation-scroll] 的出现与消失。
-      // 列挂在外层 scrollBody（不是 ChatView 根内）：会话/视图切换只改变
-      // scrollBody 内部内容，列本体不销毁——[data-chat-flow] 消失（切到轨迹页
-      // 或会话未就绪）时把轨道钳 0（隐藏），重新出现时恢复轨道。
+      // 接入对话页根（[data-phase]）：页面可能晚于插件出现（页面加载 /
+      // 会话切换），用 MutationObserver 跟随根的出现、消失与重建。
+      // 列挂在与 scrollBody 平级的外层：滚轮 / 滚动条与聊天区互不干扰；
+      // [data-chat-flow] 消失（切到轨迹页或会话未就绪）时把轨道钳 0
+      // （隐藏），重新出现时恢复轨道。
+      // 会话切换时根整棵重建（列随销毁）——检测宿主变化后重新挂载。
       // dispose 必须终止观察：否则已卸载的列会在后续 attach 时被“复活”。
       let attached = null;
       let disposed = false;
       const tryAttach = () => {
-        if (attached !== null || disposed) return;
-        const scrollBody = findScrollBody();
-        if (scrollBody === null) return;
-        if (!scrollBody.contains(column)) scrollBody.appendChild(column);
-        attached = attachToScrollBody(scrollBody, column);
+        if (disposed) return;
+        const root = findRoot();
+        if (root === null) return;
+        // 宿主已变（会话切换重建）或尚未挂载 → 重挂。
+        if (attached !== null && attached.host === root) return;
+        if (attached !== null) attached.dispose();
+        attached = null;
+        if (!root.contains(column)) root.appendChild(column);
+        attached = attachToRoot(root, column);
         ddwbBridge.setTrack = (width) => attached.setTrack(width);
+        ddwbBridge.setDragging = (on) => attached.setDragging(on);
         ddwbBridge.setTrack(ddwbBridge.trackWidth);
         // 对话视图不在（无会话 / 轨迹页）：轨道钳 0。
         if (findChatFlow() === null && typeof ddwbBridge.setTrack === "function") {
@@ -863,16 +897,14 @@ window.__ModuleLoader__.load({
           attached = null;
         }
         ddwbBridge.setTrack = null;
+        ddwbBridge.setDragging = null;
       };
-      // scrollBody 出现/消失（会话打开/关闭、页面加载）→ attach/detach。
+      // 根出现/消失（会话打开/关闭、页面加载、会话切换重建）→ attach/detach。
       // [data-chat-flow] 出现/消失（对话 ↔ 轨迹视图切换）→ 恢复/钳 0 轨道。
       const flowObserver = new MutationObserver(() => {
         if (disposed) return;
-        if (findScrollBody() !== null) {
-          if (attached === null) {
-            tryAttach();
-            return;
-          }
+        if (findRoot() !== null) {
+          tryAttach();
           // 视图切换只影响列显隐，不销毁列：对话视图在 → 恢复轨道；
           // 不在（轨迹页 / 无会话）→ 钳 0。
           const show = findChatFlow() !== null;
@@ -899,6 +931,7 @@ window.__ModuleLoader__.load({
         for (const dispose of disposers) dispose();
         if (attached !== null) attached.dispose();
         ddwbBridge.setTrack = null;
+        ddwbBridge.setDragging = null;
         if (ddwbBridge.node === column) ddwbBridge.node = null;
       };
     }
