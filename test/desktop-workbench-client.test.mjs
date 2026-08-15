@@ -118,8 +118,9 @@ globalThis.document = {
   dispatchEvent() {},
 }
 
-// ChatView root 结构：[data-chat-flow] → scroll → root（ChatView 根）。
-// 组装：scrollBody > viewArea > root（与官方 ConversationSession 结构一致）。
+// ChatView 结构：[data-chat-flow] → scroll → root（ChatView 根）。
+// 组装：scrollBody > [viewArea > root] + composerSeat（与官方一致：
+// scrollBody 是对话区外层滚动视口，含消息流槽与输入框）。
 const flow = fakeElement()
 flow.dataset.chatFlow = ''
 const chatScroll = fakeElement()
@@ -128,12 +129,15 @@ const chatRoot = fakeElement('Md3f7G_root')
 chatRoot.appendChild(chatScroll)
 const viewArea = fakeElement()
 viewArea.appendChild(chatRoot)
+const composerSeat = fakeElement()
+composerSeat.dataset.composerSeat = ''
 const viewport = fakeElement()
 viewport.clientHeight = 640
 viewport.dataset.conversationScroll = ''
 const scrollBody = fakeElement()
 scrollBody.appendChild(viewport)
 viewport.appendChild(viewArea)
+viewport.appendChild(composerSeat)
 documentBody.appendChild(scrollBody)
 
 // --- minimal module stubs -------------------------------------------------
@@ -294,14 +298,16 @@ if (await face.load() !== true) throw new Error('face.load should resolve true')
 // 等配置收敛（默认全开 → 真实配置到达 → 重装），再捕获当前列实例。
 await new Promise((resolve) => setTimeout(resolve, 10))
 
-// Default all-on attaches the column into the ChatView root as grid column 2.
-const column = chatRoot.children.find((el) => el.className === 'ddwb_col')
-if (!column) throw new Error('workbench column not attached to chat root')
-if (chatRoot.style.gridTemplateColumns !== 'minmax(0, 1fr) var(--ddwb-chat-track, 0px)') {
-  throw new Error(`chat root grid wrong: ${chatRoot.style.gridTemplateColumns}`)
+// Default all-on attaches the column into the scrollBody (outer viewport)
+// as grid column 2, spanning all rows (message flow + composer).
+const column = viewport.children.find((el) => el.className === 'ddwb_col')
+if (!column) throw new Error('workbench column not attached to scrollBody')
+if (viewport.style.gridTemplateColumns !== 'minmax(0, 1fr) var(--ddwb-chat-track, 0px)') {
+  throw new Error(`scrollBody grid wrong: ${viewport.style.gridTemplateColumns}`)
 }
 if (column.style.gridColumn !== '2') throw new Error(`column grid placement wrong: ${column.style.gridColumn}`)
-if (column.style.position !== 'sticky') throw new Error('column should be sticky inside the chat view')
+if (column.style.gridRow !== '1 / -1') throw new Error(`column grid row wrong: ${column.style.gridRow}`)
+if (column.style.position !== 'sticky') throw new Error('column should be sticky inside the scrollBody')
 if (column.style.height !== '640px') throw new Error(`column height should track the viewport: ${column.style.height}`)
 if (mountedContainer !== column) throw new Error('createRoot was not called with the column')
 if (!renderedRoot || renderedRoot.type?.name !== 'WorkbenchErrorBoundary') {
@@ -331,37 +337,43 @@ if (openStates.length < 3 || openStates[0] !== true || openStates[1] !== false |
 openOff()
 
 // --- grid self-healing ------------------------------------------------------
-// React rewrites the chat root children: the child observer must re-append.
+// React rewrites the scrollBody children: the child observer must re-append.
 const latestChildObserver = () => {
   const list = observers.filter((o) => o._kind === 'child')
   return list[list.length - 1]
 }
-chatRoot.children.length = 0
+viewport.children.length = 0
 latestChildObserver().callback()
-if (!chatRoot.children.includes(column)) {
+if (!viewport.children.includes(column)) {
   throw new Error('child observer did not re-attach the column')
 }
 
-// 视图切换：移除 [data-chat-flow]（切到轨迹页）→ flow observer detach 列。
+// 视图切换：移除 [data-chat-flow]（切到轨迹页）→ 列本体保留（挂在
+// scrollBody 外层），轨道钳 0；重新出现 → 轨道恢复。列不销毁，
+// 因此会话切换后开关仍然可用。
 const latestFlowObserver = () => {
   const list = observers.filter((o) => o._kind === 'flow')
   return list[list.length - 1]
 }
+const trackVar = () => viewport.style['--ddwb-chat-track']
 // 模拟 ChatView 卸载：把 flow 从滚动容器摘除。
 chatScroll.children.length = 0
 flow.parentElement = null
 latestFlowObserver().callback()
-if (chatRoot.children.includes(column)) {
-  throw new Error('flow observer should detach the column when chat view unmounts')
+if (!viewport.children.includes(column)) {
+  throw new Error('column should stay attached to scrollBody when chat view unmounts')
 }
-// 重新挂载：flow 回来 → attach 恢复。
+if (trackVar() !== '0px') {
+  throw new Error(`track should clamp to 0 when chat view unmounts: ${trackVar()}`)
+}
+// 重新挂载：flow 回来 → 轨道恢复。
 chatScroll.appendChild(flow)
 latestFlowObserver().callback()
-if (!chatRoot.children.includes(column)) {
-  throw new Error('flow observer should re-attach the column when chat view remounts')
+if (!viewport.children.includes(column)) {
+  throw new Error('column should stay attached when chat view remounts')
 }
-if (chatRoot.style.gridTemplateColumns !== 'minmax(0, 1fr) var(--ddwb-chat-track, 0px)') {
-  throw new Error(`grid template lost after remount: ${chatRoot.style.gridTemplateColumns}`)
+if (viewport.style.gridTemplateColumns !== 'minmax(0, 1fr) var(--ddwb-chat-track, 0px)') {
+  throw new Error(`grid template lost after remount: ${viewport.style.gridTemplateColumns}`)
 }
 
 // --- service registry behavior ---------------------------------------------
@@ -428,13 +440,13 @@ collapseOff()
 
 // --- disabled config converges to no column / no toggle ---------------------
 await new Promise((resolve) => setTimeout(resolve, 10))
-if (!chatRoot.children.includes(column)) throw new Error('enabled config should keep the column attached')
+if (!viewport.children.includes(column)) throw new Error('enabled config should keep the column attached')
 
 // A fresh page (reload path) with the framework disabled must not attach.
 servedConfig = { enabled: false }
 loaded.length = 0
 registered.length = 0
-chatRoot.children.length = 0
+viewport.children.length = 0
 headStyles.length = 0
 renderedRoot = null
 mountedContainer = null
@@ -443,7 +455,7 @@ const freshEntry = loaded[0]
 const freshExports = freshEntry.factory(requireStub)
 freshExports.apply(ctx)
 await new Promise((resolve) => setTimeout(resolve, 10))
-if (chatRoot.children.some((el) => el.className === 'ddwb_col')) {
+if (viewport.children.some((el) => el.className === 'ddwb_col')) {
   throw new Error('disabled config should attach no column')
 }
 if (registered.some((r) => r.entry.options?.id === 'workbench-toggle')) {

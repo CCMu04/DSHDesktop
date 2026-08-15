@@ -148,7 +148,9 @@ window.__ModuleLoader__.load({
       ".ddwb_placeholder{padding:24px 16px;text-align:center;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.6}" +
       ".ddwb_placeholderTitle{display:block;color:var(--dsw-alias-label-secondary);font-size:14px;font-weight:600;margin-bottom:4px}" +
       // Header 页签行右端的 [|] 开合按钮：与打开工作区/导出会话同排。
-      ".ddwb_toggleBtn{box-sizing:border-box;min-height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:0;border-radius:6px;align-items:center;gap:4px;padding:0 8px;display:inline-flex}.ddwb_toggleBtn:hover:not(:disabled),.ddwb_toggleBtn:focus-visible{color:var(--dsw-alias-label-secondary)}.ddwb_toggleBtnActive{color:var(--dsw-alias-brand-primary)}.ddwb_toggleBtnActive:hover:not(:disabled){color:var(--dsw-alias-brand-primary)}.ddwb_toggleBtn svg{flex:none}" +
+      // Header 页签行右端的 [|] 开合按钮：与打开工作区 / 导出会话同排同风格
+      // （dshDesktopUi_trigger 同款：28px 高、12px 字、图标 12 + 文字）。
+      ".ddwb_toggleBtn{box-sizing:border-box;min-height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:0;border-radius:6px;align-items:center;gap:4px;padding:0 8px;font-size:12px;line-height:20px;white-space:nowrap;display:inline-flex}.ddwb_toggleBtn:hover:not(:disabled),.ddwb_toggleBtn:focus-visible{color:var(--dsw-alias-label-secondary)}.ddwb_toggleBtnActive{color:var(--dsw-alias-brand-primary)}.ddwb_toggleBtnActive:hover:not(:disabled),.ddwb_toggleBtnActive:focus-visible{color:var(--dsw-alias-brand-primary)}.ddwb_toggleBtn svg,.ddwb_toggleBtn span{flex:none}" +
       // 官方左面板图标水平翻转 → 「右侧面板」（工作台在对话页右侧）。
       ".ddwb_panelRight{transform:scaleX(-1)}" +
       ".ddwb_card{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;padding:14px 16px;margin:12px}" +
@@ -332,25 +334,13 @@ window.__ModuleLoader__.load({
     }
     //#endregion
 
-    //#region ChatView grid 集成
+    //#region 对话区 grid 集成
     /**
-     * 找到对话视图根：消息流容器（[data-chat-flow]）向上两级。
-     * 页面核心 bundle 可能晚于插件加载，调用方负责重试。
+     * 找到对话区滚动视口容器（[data-conversation-scroll]，ConversationRoot 的
+     * scrollBody——对话页外层容器，包含消息流（conversation.session 槽）与
+     * 输入框（composerSeat））。页面核心 bundle 可能晚于插件加载，调用方负责重试。
      */
-    function findChatRoot() {
-      try {
-        const flow = document.querySelector(ddwbChatFlowSelector);
-        if (flow === null) return null;
-        return flow.parentElement?.parentElement ?? null;
-      } catch {
-        return null;
-      }
-    }
-
-    /**
-     * 找到对话区滚动视口（[data-conversation-scroll]），用于钉住工作台列高度。
-     */
-    function findChatViewport() {
+    function findScrollBody() {
       try {
         return document.querySelector('[data-conversation-scroll]');
       } catch {
@@ -359,72 +349,77 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * 把工作台列接进 ChatView 根：
-     *   - ChatView 根变两列 grid（左 = 官方消息流，右 = 工作台），轨道宽度
-     *     由 --ddwb-chat-track 变量控制（0 = 收起）；
-     *   - 列高钉在滚动视口高度（[data-conversation-scroll].clientHeight），
-     *     ResizeObserver 跟随视口变化；消息流滚动时工作台保持可见；
-     *   - 视图切换（对话 ↔ 轨迹）时 ChatView 卸载，列随之消失；[data-chat-flow]
-     *     重新出现时本插件重新挂载（见 installDock 的观察器）。
-     * 返回 { setTrack(width), setOpenHeight(), dispose }。
+     * 找到对话视图消息流容器（[data-chat-flow]，ChatView 独有，轨迹视图不渲染）。
      */
-    function attachToChatRoot(root, column) {
+    function findChatFlow() {
+      try {
+        return document.querySelector(ddwbChatFlowSelector);
+      } catch {
+        return null;
+      }
+    }
+
+    /**
+     * 把工作台列接进对话区 scrollBody：
+     *   - scrollBody 变两列 grid：左列 = 官方内容（消息流槽 + composerSeat，
+     *     均自动落在第一列），右列 = 工作台（grid-column 2 / grid-row 1 / -1，
+     *     跨消息流与输入框两行——输入框不会顶起工作台）；
+     *   - 列高钉在 scrollBody 视口高度（clientHeight），ResizeObserver 跟随
+     *     窗口/布局变化；sticky top 0 让消息流滚动时工作台保持可见；
+     *   - 轨道宽度由 --ddwb-chat-track 变量控制（0 = 收起）；
+     *   - 列挂在外层容器而非 ChatView 根内：会话切换 / 视图切换只改变
+     *     scrollBody 内部内容（ChatView 卸载重挂），列本体不销毁——
+     *     [data-chat-flow] 消失时把轨道钳 0（隐藏），重新出现时恢复。
+     * 返回 { setTrack(width), dispose }。
+     */
+    function attachToScrollBody(scrollBody, column) {
       const WIDTH_VAR = "--ddwb-chat-track";
       const observers = [];
       let lastWidth = 0;
       let lastHeight = 0;
       const applyTrack = () => {
         column.style.gridColumn = "2";
-        column.style.gridRow = "1";
+        column.style.gridRow = "1 / -1";
         column.style.alignSelf = "start";
-        // sticky：消息流（左列）在滚动视口内滚动时，工作台列钉在视口顶部。
+        // sticky：消息流滚动时工作台列钉在视口顶部。
         column.style.position = "sticky";
         column.style.top = "0";
-        root.style.setProperty(WIDTH_VAR, String(lastWidth) + "px");
-        // grid 分栏：左列 = 官方消息流（第一子元素），右列 = 工作台。
-        root.style.display = "grid";
-        root.style.gridTemplateColumns =
+        scrollBody.style.setProperty(WIDTH_VAR, String(lastWidth) + "px");
+        // grid 分栏：左列 = 官方内容，右列 = 工作台（官方 scrollBody 是
+        // flex column，覆盖为 grid 后原内容仍按顺序落第一列）。
+        scrollBody.style.display = "grid";
+        scrollBody.style.gridTemplateColumns =
           "minmax(0, 1fr) var(--ddwb-chat-track, 0px)";
       };
       applyTrack();
       const syncHeight = () => {
-        const viewport = findChatViewport();
-        const height =
-          viewport !== null && viewport.clientHeight > 0
-            ? viewport.clientHeight
-            : 0;
+        const height = scrollBody.clientHeight;
         if (height === lastHeight) return;
         lastHeight = height;
         if (height > 0) column.style.height = height + "px";
       };
       syncHeight();
-      const viewportEl = findChatViewport();
-      if (viewportEl !== null) {
-        const viewportObserver = new ResizeObserver(() => {
-          syncHeight();
-        });
-        viewportObserver.observe(viewportEl);
-        observers.push(viewportObserver);
-      }
+      const resizeObserver = new ResizeObserver(() => {
+        syncHeight();
+      });
+      resizeObserver.observe(scrollBody);
+      observers.push(resizeObserver);
       // React 重渲染可能摘掉列，childList 观察器自愈重挂。
       const childObserver = new MutationObserver(() => {
-        if (!root.contains(column)) root.appendChild(column);
+        if (!scrollBody.contains(column)) scrollBody.appendChild(column);
       });
-      childObserver.observe(root, { childList: true });
+      childObserver.observe(scrollBody, { childList: true });
       observers.push(childObserver);
       return {
         setTrack(width) {
           lastWidth = Math.max(0, Math.round(width));
           applyTrack();
         },
-        setOpenHeight() {
-          syncHeight();
-        },
         dispose() {
           for (const observer of observers) observer.disconnect();
-          root.style.removeProperty(WIDTH_VAR);
-          root.style.removeProperty("display");
-          root.style.removeProperty("grid-template-columns");
+          scrollBody.style.removeProperty(WIDTH_VAR);
+          scrollBody.style.removeProperty("display");
+          scrollBody.style.removeProperty("grid-template-columns");
           column.remove();
         },
       };
@@ -841,19 +836,26 @@ window.__ModuleLoader__.load({
         root.unmount();
       });
 
-      // 接入 ChatView grid：对话视图可能晚于插件出现（页面加载 / 视图切换），
-      // 用 MutationObserver 跟随 [data-chat-flow] 的出现与消失。
+      // 接入对话区 scrollBody：页面可能晚于插件出现（页面加载 / 会话切换），
+      // 用 MutationObserver 跟随 [data-conversation-scroll] 的出现与消失。
+      // 列挂在外层 scrollBody（不是 ChatView 根内）：会话/视图切换只改变
+      // scrollBody 内部内容，列本体不销毁——[data-chat-flow] 消失（切到轨迹页
+      // 或会话未就绪）时把轨道钳 0（隐藏），重新出现时恢复轨道。
       // dispose 必须终止观察：否则已卸载的列会在后续 attach 时被“复活”。
       let attached = null;
       let disposed = false;
       const tryAttach = () => {
         if (attached !== null || disposed) return;
-        const chatRoot = findChatRoot();
-        if (chatRoot === null) return;
-        if (!chatRoot.contains(column)) chatRoot.appendChild(column);
-        attached = attachToChatRoot(chatRoot, column);
+        const scrollBody = findScrollBody();
+        if (scrollBody === null) return;
+        if (!scrollBody.contains(column)) scrollBody.appendChild(column);
+        attached = attachToScrollBody(scrollBody, column);
         ddwbBridge.setTrack = (width) => attached.setTrack(width);
         ddwbBridge.setTrack(ddwbBridge.trackWidth);
+        // 对话视图不在（无会话 / 轨迹页）：轨道钳 0。
+        if (findChatFlow() === null && typeof ddwbBridge.setTrack === "function") {
+          ddwbBridge.setTrack(0);
+        }
       };
       const detach = () => {
         if (attached !== null) {
@@ -862,12 +864,25 @@ window.__ModuleLoader__.load({
         }
         ddwbBridge.setTrack = null;
       };
-      // 监听 [data-chat-flow] 出现（对话视图挂载）→ attach；
-      // 消失（切到轨迹页 / 会话关闭）→ detach。
+      // scrollBody 出现/消失（会话打开/关闭、页面加载）→ attach/detach。
+      // [data-chat-flow] 出现/消失（对话 ↔ 轨迹视图切换）→ 恢复/钳 0 轨道。
       const flowObserver = new MutationObserver(() => {
         if (disposed) return;
-        if (findChatRoot() !== null) tryAttach();
-        else detach();
+        if (findScrollBody() !== null) {
+          if (attached === null) {
+            tryAttach();
+            return;
+          }
+          // 视图切换只影响列显隐，不销毁列：对话视图在 → 恢复轨道；
+          // 不在（轨迹页 / 无会话）→ 钳 0。
+          const show = findChatFlow() !== null;
+          const target = show ? ddwbBridge.trackWidth : 0;
+          if (typeof ddwbBridge.setTrack === "function") {
+            ddwbBridge.setTrack(target);
+          }
+        } else {
+          detach();
+        }
       });
       flowObserver.observe(document.body, {
         childList: true,
@@ -912,9 +927,14 @@ window.__ModuleLoader__.load({
         title: open ? t("closePanel") : t("openPanel"),
         "aria-label": open ? t("closePanel") : t("openPanel"),
         onClick: () => workbench.toggle(),
-        children: jsx(PanelRightIcon, {
-          size: 16,
-        }),
+        children: [
+          jsx(PanelRightIcon, {
+            size: 12,
+          }),
+          jsx("span", {
+            children: t("toggle.label"),
+          }),
+        ],
       });
     }
     //#endregion
@@ -924,6 +944,7 @@ window.__ModuleLoader__.load({
       "feature.title": "工作台框架",
       "feature.description":
         "对话页右侧分栏工作台：文件 / Git 等功能面板与对话并存显示（页签行 [|] 按钮开关）",
+      "toggle.label": "工作台",
       "openPanel": "打开工作台",
       "closePanel": "关闭工作台",
       "resizePanel": "拖拽调整宽度，点击收起",
@@ -936,6 +957,7 @@ window.__ModuleLoader__.load({
       "feature.title": "Workbench framework",
       "feature.description":
         "Side workbench inside the chat view: Files / Git panels show beside the conversation (toggled by the [|] header button)",
+      "toggle.label": "Workbench",
       "openPanel": "Open workbench",
       "closePanel": "Close workbench",
       "resizePanel": "Drag to resize, click to collapse",
