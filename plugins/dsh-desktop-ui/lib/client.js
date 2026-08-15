@@ -44,6 +44,7 @@ window.__ModuleLoader__.load({
     /** Every feature switch and its default state (all on). 顺序即卡片行序。 */
     const dduiDefaultConfig = {
       settingsDrawer: true,
+      sessionLogExport: true,
       statsLine: true,
       chatPolish: true,
     };
@@ -420,6 +421,9 @@ window.__ModuleLoader__.load({
       "config.saveFailed": "保存失败，请重试。",
       "config.settingsDrawer": "设置抽屉",
       "config.settingsDrawer.desc": "打开设置时从左侧滑出面板，取代居中的弹窗",
+      "config.sessionLogExport": "会话日志导出",
+      "config.sessionLogExport.desc":
+        "在页签行右侧显示「导出会话」按钮（中文），一键打包当前会话",
       "config.statsLine": "统计栏",
       "config.statsLine.desc":
         "输入框下方的统计信息占满整行居中显示，超出部分以省略号收尾",
@@ -455,6 +459,9 @@ window.__ModuleLoader__.load({
       "config.settingsDrawer": "Settings drawer",
       "config.settingsDrawer.desc":
         "Open settings as a slide-in panel from the left instead of a centered modal",
+      "config.sessionLogExport": "Session log export",
+      "config.sessionLogExport.desc":
+        "Show the localized Export Session button at the tab-row right end",
       "config.statsLine": "Stats line",
       "config.statsLine.desc":
         "Show the stats row under the input full-width and centered, with an ellipsis for overflow",
@@ -470,6 +477,16 @@ window.__ModuleLoader__.load({
       ".dduiC_card{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;list-style:none;transition:border-color .16s,background .16s}.dduiC_card:hover{border-color:var(--dsw-alias-label-dimmed)}.dduiC_cardOpen{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-label-dimmed)}.dduiC_header{appearance:none;width:100%;font:inherit;color:inherit;text-align:left;cursor:pointer;background:0 0;border:0;border-radius:12px;align-items:center;gap:12px;padding:14px 16px;display:flex}.dduiC_header:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}.dduiC_headText{flex-direction:column;flex:1;gap:4px;min-width:0;display:flex}.dduiC_name{color:var(--dsw-alias-label-primary);font-size:15px;font-weight:600;line-height:1.4}.dduiC_description{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}.dduiC_chevron{color:var(--dsw-alias-label-tertiary);flex:none;transition:transform .16s}.dduiC_chevronOpen{transform:rotate(180deg)}.dduiC_body{border-top:1px solid var(--dsw-alias-border-l2);margin:0 16px;padding-bottom:8px}.dduiC_field{flex-direction:column;gap:6px;padding:12px 0;display:flex}.dduiC_field+.dduiC_field{border-top:1px solid var(--dsw-alias-border-l2)}.dduiC_head{align-items:center;gap:8px;display:flex}.dduiC_label{min-width:0;color:var(--dsw-alias-label-primary);flex:1;font-size:13px;font-weight:500;line-height:1.5}.dduiC_badges{align-items:center;gap:8px;display:inline-flex}.dduiC_badge{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px}.dduiC_badgeMuted{white-space:nowrap;color:var(--dsw-alias-label-tertiary);border-radius:999px;padding:1px 8px;font-size:11px;line-height:17px}.dduiC_switch{accent-color:var(--dsw-alias-brand-primary);flex:none;width:16px;height:16px;margin:0;cursor:pointer}.dduiC_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}.dduiC_footer{border-top:1px solid var(--dsw-alias-border-l2);justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px;display:flex}.dduiC_failed{min-width:0;color:var(--dsw-alias-label-error);flex:1;margin:0;font-size:12px;line-height:1.5}.dduiC_discard,.dduiC_save{appearance:none;font:inherit;cursor:pointer;border:1px solid #0000;border-radius:8px;padding:5px 14px;font-size:13px;line-height:1.5}.dduiC_discard{border-color:var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);background:0 0}.dduiC_discard:hover:not(:disabled){color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-dimmed)}.dduiC_save{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}.dduiC_discard:disabled,.dduiC_save:disabled{opacity:.4;cursor:default}.dduiC_discard:focus-visible,.dduiC_save:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}";
     const configCardTagId = "dsh-desktop-ui/ConfigCard.module.css";
     dduiInstallCss(configCardCss, configCardTagId);
+    /**
+     * 官方 dsh-session-log-export 的导出按钮（英文 "Session log" 胶囊）由本插件
+     * 的中文「导出会话」按钮替代，常驻隐藏官方按钮（无论开关状态，避免英文
+     * 按钮与开关语义冲突）；本插件的按钮注册在独立 id 下，与官方不冲突。
+     * 官方按钮的 CSS-module 类名后缀稳定为 sessionLogButton。
+     */
+    const hideOfficialSessionLogCss =
+      '[data-slot="conversation.session.header.utilities"] [class*="sessionLogButton"]{display:none!important}';
+    const hideOfficialSessionLogTagId = "dsh-desktop-ui/HideOfficialSessionLog.module.css";
+    dduiInstallCss(hideOfficialSessionLogCss, hideOfficialSessionLogTagId);
     /** Settings card editing the desktop-ui feature switches (reads/writes the host config API). DOM mirrors the official plugin-configuration card: header (name + description + pending badge + chevron), fields (label + status badge + control + hint), footer (failed note + reset + save). */
     function DesktopUiConfigCard({ t }) {
       const [state, setState] = react.useState({
@@ -716,6 +733,33 @@ window.__ModuleLoader__.load({
               "dsh-desktop-ui: settings drawer close shim",
             ),
           );
+        }
+        if (config.sessionLogExport) {
+          install(() => installHeaderActionCss());
+          install(() => installUtilitiesCss());
+          const controller = ctx.get("sessionLogDownload");
+          if (controller !== void 0) {
+            install(() =>
+              ctx.slots.inject("conversation.session.header.utilities", () =>
+                ctx.slots.register(
+                  {
+                    name: "conversation.session.header.utilities",
+                    id: "dsh-desktop-ui-session-log-download",
+                    order: 30,
+                    locale: NS,
+                    inject: () => ({
+                      hooks: { sessionLogDownload: controller.store },
+                      request: (sessionId) => controller.download(sessionId),
+                      dismiss: (sessionId) => {
+                        controller.dismiss(sessionId);
+                      },
+                    }),
+                  },
+                  ExportMoveHeaderAction,
+                ),
+              ),
+            );
+          }
         }
         if (config.chatPolish) {
           install(() => installChatPolishCss());

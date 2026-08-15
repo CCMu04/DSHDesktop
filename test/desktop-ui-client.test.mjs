@@ -153,14 +153,15 @@ if (!Array.isArray(moduleExports.inject)) throw new Error('inject export missing
 moduleExports.apply(ctx)
 const allOnIds = () => registered.map((r) => r.entry.options?.id).sort()
 // 视觉增强只有 config 卡片与聊天微调的 open-workspace 条目注册 slot
-// （settingsDrawer 走 effect；导出按钮由官方 dsh-session-log-export 提供，
-// 本插件不再注册同名条目，避免与官方 utilities 槽位冲突）。
+// （settingsDrawer 走 effect；sessionLogExport 因测试环境无
+// sessionLogDownload 控制器而只装样式，其按钮注册在独立 id 下不与官方冲突）。
 if (JSON.stringify(allOnIds()) !== JSON.stringify(['dsh-desktop-ui-config', 'open-workspace'])) {
   throw new Error(`all-on install entries wrong: ${allOnIds().join(', ')}`)
 }
-// All-on installs every feature style plus the always-on card style.
-if (headStyles.length !== 6) {
-  throw new Error(`all-on should install 6 style tags, got ${headStyles.length}: ${headStyles.map((s) => s.dataset.pluginCss).join(', ')}`)
+// All-on installs every feature style plus the always-on styles (config card
+// + official-session-log-button hiding).
+if (headStyles.length !== 7) {
+  throw new Error(`all-on should install 7 style tags, got ${headStyles.length}: ${headStyles.map((s) => s.dataset.pluginCss).join(', ')}`)
 }
 
 await new Promise((resolve) => setTimeout(resolve, 10))
@@ -175,6 +176,7 @@ const expectedStyles = [
   'dsh-desktop-ui/ConfigCard.module.css',
   'dsh-desktop-ui/HeaderAction.module.css',
   'dsh-desktop-ui/HeaderUtilities.module.css',
+  'dsh-desktop-ui/HideOfficialSessionLog.module.css',
   'dsh-desktop-ui/StatsLine.module.css',
 ].sort()
 if (JSON.stringify(remainingStyles) !== JSON.stringify(expectedStyles)) {
@@ -182,7 +184,7 @@ if (JSON.stringify(remainingStyles) !== JSON.stringify(expectedStyles)) {
 }
 
 // --- a fresh page (reload path) with everything off must also be clean ----
-servedConfig = { settingsDrawer: false, statsLine: false, chatPolish: false }
+servedConfig = { settingsDrawer: false, sessionLogExport: false, statsLine: false, chatPolish: false }
 registered.length = 0
 headStyles.length = 0
 loaded.length = 0
@@ -195,9 +197,12 @@ const ids2 = registered.map((r) => r.entry.options?.id).sort()
 if (JSON.stringify(ids2) !== JSON.stringify(['dsh-desktop-ui-config'])) {
   throw new Error(`all-off entries wrong: ${ids2.join(', ')}`)
 }
-// Everything off: only the always-on card style remains.
+// Everything off: only the always-on card + official-button hiding styles remain.
 const offStyles = headStyles.map((s) => s.dataset.pluginCss).sort()
-if (JSON.stringify(offStyles) !== JSON.stringify(['dsh-desktop-ui/ConfigCard.module.css'])) {
+if (JSON.stringify(offStyles) !== JSON.stringify([
+  'dsh-desktop-ui/ConfigCard.module.css',
+  'dsh-desktop-ui/HideOfficialSessionLog.module.css',
+])) {
   throw new Error(`all-off styles wrong: ${offStyles.join(', ')}`)
 }
 
