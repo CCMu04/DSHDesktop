@@ -686,6 +686,18 @@ window.__ModuleLoader__.load({
               });
       } else if (activeTab && typeof activeTab.component === "function") {
         view = createElement(activeTab.component, { ctx, service, t });
+      } else if (snap.tabs.length > 0) {
+        // 有功能插件但尚未选中标签（如切换会话后重置）：引导选择。
+        view = jsxs("div", {
+          className: "ddwb_placeholder",
+          children: [
+            jsx("span", {
+              className: "ddwb_placeholderTitle",
+              children: t("pickTitle"),
+            }),
+            t("pickHint"),
+          ],
+        });
       } else {
         view = jsxs("div", {
           className: "ddwb_placeholder",
@@ -722,7 +734,6 @@ window.__ModuleLoader__.load({
                 moved: false,
                 rawWidth: layoutRef.current.width,
                 lastWidth: layoutRef.current.width,
-                raf: null,
               };
             },
             onPointerMove: (event) => {
@@ -734,32 +745,24 @@ window.__ModuleLoader__.load({
               // rawWidth 不钳制：用于「拖到很窄自动收起」判断。
               drag.rawWidth = drag.startWidth - dx;
               drag.lastWidth = ddwbClampWidth(drag.rawWidth);
-              if (drag.raf !== null) return;
-              drag.raf = requestAnimationFrame(() => {
-                drag.raf = null;
-                // 拖到很窄（< 200px）→ 自动收起：轨道归 0、结束拖拽状态。
-                if (drag.rawWidth < ddwbCollapseWidth) {
-                  dragRef.current = null;
-                  if (typeof ddwbBridge.setTrack === "function") {
-                    ddwbBridge.setTrack(0);
-                  }
-                  service.setOpen(false);
-                  return;
-                }
-                // 常规拖拽：rAF 节流后同步轨道（写 CSS 变量，不经过 React state）。
+              // 同步写轨道（不经 rAF / React state）：拖动中宽度实时跟手。
+              // 拖到很窄（< 200px）→ 自动收起：轨道归 0、结束拖拽状态。
+              if (drag.rawWidth < ddwbCollapseWidth) {
+                dragRef.current = null;
                 if (typeof ddwbBridge.setTrack === "function") {
-                  ddwbBridge.setTrack(drag.lastWidth);
+                  ddwbBridge.setTrack(0);
                 }
-              });
+                service.setOpen(false);
+                return;
+              }
+              if (typeof ddwbBridge.setTrack === "function") {
+                ddwbBridge.setTrack(drag.lastWidth);
+              }
             },
             onPointerUp: (event) => {
               const drag = dragRef.current;
               if (drag === null) return;
               dragRef.current = null;
-              if (drag.raf !== null) {
-                cancelAnimationFrame(drag.raf);
-                drag.raf = null;
-              }
               if (event.currentTarget.hasPointerCapture(event.pointerId)) {
                 event.currentTarget.releasePointerCapture(event.pointerId);
               }
@@ -768,7 +771,7 @@ window.__ModuleLoader__.load({
               }
               if (drag.moved) {
                 if (drag.rawWidth < ddwbCollapseWidth) {
-                  // 快速拖放：rAF 未及触发但宽度已低于收起阈值 → 直接收起。
+                  // 快速拖放：宽度已低于收起阈值 → 直接收起。
                   if (typeof ddwbBridge.setTrack === "function") {
                     ddwbBridge.setTrack(0);
                   }
@@ -970,6 +973,8 @@ window.__ModuleLoader__.load({
       "openPanel": "打开工作台",
       "closePanel": "关闭工作台",
       "resizePanel": "拖拽调整宽度，点击收起",
+      "pickTitle": "选择一个功能标签页",
+      "pickHint": "从上方标签栏选择（文件 / Git 等）开始使用",
       "emptyTitle": "工作台为空",
       "emptyHint": "功能插件（文件 / Git）安装后，它们的标签页会出现在这里",
       "noViewerTitle": "无法预览此文件",
@@ -983,6 +988,8 @@ window.__ModuleLoader__.load({
       "openPanel": "Open workbench",
       "closePanel": "Close workbench",
       "resizePanel": "Drag to resize, click to collapse",
+      "pickTitle": "Pick a feature tab",
+      "pickHint": "Choose one from the tab bar above (Files / Git, …) to get started",
       "emptyTitle": "Workbench is empty",
       "emptyHint":
         "Feature plugins (Files / Git) will appear here once installed",
