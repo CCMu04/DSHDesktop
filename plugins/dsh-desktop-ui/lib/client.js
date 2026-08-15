@@ -44,7 +44,6 @@ window.__ModuleLoader__.load({
     /** Every feature switch and its default state (all on). 顺序即卡片行序。 */
     const dduiDefaultConfig = {
       settingsDrawer: true,
-      sessionLogExport: true,
       statsLine: true,
       chatPolish: true,
     };
@@ -421,9 +420,6 @@ window.__ModuleLoader__.load({
       "config.saveFailed": "保存失败，请重试。",
       "config.settingsDrawer": "设置抽屉",
       "config.settingsDrawer.desc": "打开设置时从左侧滑出面板，取代居中的弹窗",
-      "config.sessionLogExport": "会话日志导出",
-      "config.sessionLogExport.desc":
-        "在页签行右侧显示「导出会话」按钮，一键打包当前会话",
       "config.statsLine": "统计栏",
       "config.statsLine.desc":
         "输入框下方的统计信息占满整行居中显示，超出部分以省略号收尾",
@@ -459,9 +455,6 @@ window.__ModuleLoader__.load({
       "config.settingsDrawer": "Settings drawer",
       "config.settingsDrawer.desc":
         "Open settings as a slide-in panel from the left instead of a centered modal",
-      "config.sessionLogExport": "Session log export",
-      "config.sessionLogExport.desc":
-        "Show an Export Session button at the tab-row right end to package the session in one click",
       "config.statsLine": "Stats line",
       "config.statsLine.desc":
         "Show the stats row under the input full-width and centered, with an ellipsis for overflow",
@@ -724,36 +717,10 @@ window.__ModuleLoader__.load({
             ),
           );
         }
-        if (config.sessionLogExport) {
-          install(() => installHeaderActionCss());
-          install(() => installUtilitiesCss());
-          const controller = ctx.get("sessionLogDownload");
-          if (controller !== void 0) {
-            install(() =>
-              ctx.slots.inject("conversation.session.header.utilities", () =>
-                ctx.slots.register(
-                  {
-                    name: "conversation.session.header.utilities",
-                    id: "session-log-download",
-                    order: 30,
-                    locale: NS,
-                    inject: () => ({
-                      hooks: { sessionLogDownload: controller.store },
-                      request: (sessionId) => controller.download(sessionId),
-                      dismiss: (sessionId) => {
-                        controller.dismiss(sessionId);
-                      },
-                    }),
-                  },
-                  ExportMoveHeaderAction,
-                ),
-              ),
-            );
-          }
-        }
         if (config.chatPolish) {
           install(() => installChatPolishCss());
           install(() => installUtilitiesCss());
+          install(() => installHeaderActionCss());
           install(() =>
             ctx.slots.inject("conversation.session.header.utilities", () =>
               ctx.slots.register(
