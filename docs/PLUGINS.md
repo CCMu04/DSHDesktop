@@ -264,7 +264,7 @@ Copy-Item plugins\dsh-desktop-<name>\lib "$env:APPDATA\deepseek-harness-desktop\
 
 ```powershell
 # 1) 构建（sync 官方 DSH → 写插件版本 → 准备运行时 → 打包）
-npm run dist          # 版本自动递增（如 6.5.10 → 6.5.11），产物在 dist/
+npm run dist          # 版本自动递增（如 6.6.0 → 6.6.1），产物在 dist/
 npm run dist:offline  # 离线重建同一版本（不递增）
 
 # 2) 提交推送
@@ -275,11 +275,11 @@ git tag v0.1.0-rc.<官方版本>.<补丁> && git push origin v0.1.0-rc.<官方�
 # release.yml：推送 v* tag 触发 → npm test → electron-builder → gh release create（--prerelease）
 
 # 4) 发布后转正式并钉为 Latest（工作流写死了 --prerelease；且旧版可能钉住 Latest）
-gh api --method PATCH repos/CCMu04/DSHDesktop/releases/tags/v0.1.0-rc.6.5.10 \
+gh api --method PATCH repos/CCMu04/DSHDesktop/releases/tags/v0.1.0-rc.6.6.0 \
   -f make_latest=true -F prerelease=false
 ```
 
-- 版本规则：`<官方 DSH 版本>.<major>.<minor>` 形式，补丁线只增不重置（`6.5.10 → 6.5.11`），由 `scripts/sync-dsh.mjs` 自动计算。
+- 版本规则：`<官方 DSH 版本>.<major>.<minor>` 形式，补丁线只增不重置（`6.5.10 → 6.5.11 → 6.6.0`，官方大版本线升级时补丁线归零），由 `scripts/sync-dsh.mjs` 自动计算。
 - 发布前置：`CHANGELOG.md` 新增版本条目（新增 / 修复 / 变更 / 移除），`RELEASE_NOTES.md` 更新为本次发布说明（会原文作为 release 备注）。
 - 发布前清理 `dist/` 旧版本产物，只保留最新。
 
