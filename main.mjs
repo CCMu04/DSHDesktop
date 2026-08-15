@@ -16,7 +16,7 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog, Menu, shell } from 'electron'
+import { app, BrowserWindow, dialog, Menu, nativeTheme, shell } from 'electron'
 import { ensureBundledPlugin } from './builtin-plugin.mjs'
 import { prepareDesktopToolchain } from './toolchain.mjs'
 
@@ -38,6 +38,18 @@ const nodeExecutablePath = app.isPackaged
   : process.execPath
 const backendHost = '127.0.0.1'
 const startupTimeoutMs = 60_000
+
+// Window controls overlay: the minimize / maximize / close glyphs are native
+// chrome drawn by the OS and cannot be styled by the page's CSS. The overlay
+// background stays transparent so the buttons sit on the page header; only
+// the symbol color must follow the theme, or the glyphs vanish on a dark
+// header. The loading page follows the OS color scheme; the backend page
+// reports its own theme (body[data-ds-dark-theme], the palette switch the
+// official UI and every bundled skin key off) through the console marker.
+const titleBarOverlayOptions = { color: '#00000000', height: 38 }
+const titleBarSymbolLight = '#22252b'
+const titleBarSymbolDark = '#ebeef2'
+const titleBarThemeMarker = '__DSH_TITLEBAR_THEME__:'
 
 // Windows toasts (HTML5 Notification → system notifications) are attributed
 // through the AppUserModelID: without it Electron falls back to a generic
@@ -374,6 +386,15 @@ function isBackendUrl(target) {
   }
 }
 
+function syncTitleBarOverlay(window, symbolColor) {
+  if (!window || window.isDestroyed()) return
+  window.setTitleBarOverlay({ ...titleBarOverlayOptions, symbolColor })
+}
+
+function syncTitleBarOverlayFromNativeTheme(window) {
+  syncTitleBarOverlay(window, nativeTheme.shouldUseDarkColors ? titleBarSymbolDark : titleBarSymbolLight)
+}
+
 function configureNavigation(window) {
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (isBackendUrl(url)) return { action: 'allow' }
@@ -402,7 +423,12 @@ function configureNavigation(window) {
   // disabled, so the dialog's own header row stays fully clickable, and it
   // is restored when the dialog closes.
   window.webContents.on('did-finish-load', () => {
-    if (!isBackendUrl(window.webContents.getURL())) return
+    if (!isBackendUrl(window.webContents.getURL())) {
+      // The loading page follows the OS color scheme; the backend page below
+      // reports its own theme instead.
+      syncTitleBarOverlayFromNativeTheme(window)
+      return
+    }
     void window.webContents.executeJavaScript(`
       if (!document.getElementById('dsh-desktop-drag-style')) {
         const dragStyle = document.createElement('style')
@@ -441,24 +467,56 @@ function configureNavigation(window) {
         syncDragRegion()
       }
     `)
+    void window.webContents.executeJavaScript(`
+      if (!window.__dshTitlebarThemeObserver) {
+        const reportTitlebarTheme = () => {
+          console.log(
+            '${titleBarThemeMarker}' + (document.body.hasAttribute('data-ds-dark-theme') ? 'dark' : 'light'),
+          )
+        }
+        window.__dshTitlebarThemeObserver = new MutationObserver(reportTitlebarTheme)
+        window.__dshTitlebarThemeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] })
+        reportTitlebarTheme()
+      }
+    `)
+  })
+
+  // The backend page reports its theme through the console marker above; the
+  // Window Controls Overlay symbol color follows it. While the loading page
+  // is up (it follows the OS scheme), track OS theme changes too — once the
+  // backend page loads, its own report takes over.
+  window.webContents.on('console-message', details => {
+    const message = details?.message
+    if (typeof message !== 'string' || !message.startsWith(titleBarThemeMarker)) return
+    const dark = message.slice(titleBarThemeMarker.length).includes('dark')
+    syncTitleBarOverlay(window, dark ? titleBarSymbolDark : titleBarSymbolLight)
+  })
+
+  nativeTheme.on('updated', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (isBackendUrl(mainWindow.webContents.getURL())) return
+    syncTitleBarOverlayFromNativeTheme(mainWindow)
   })
 }
 
 async function createWindow() {
+  // The loading page follows the OS color scheme (loading.html), so the
+  // initial background and window-control glyph colors do too; once the
+  // backend page loads, its own theme report takes over.
+  const systemDark = nativeTheme.shouldUseDarkColors
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 900,
     minHeight: 600,
     show: false,
-    backgroundColor: '#f7f8fa',
+    backgroundColor: systemDark ? '#14161a' : '#f7f8fa',
     icon: path.join(shellDirectory, 'assets', 'icon.png'),
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#00000000',
-      symbolColor: '#22252b',
-      height: 38,
+      ...titleBarOverlayOptions,
+      symbolColor: systemDark ? titleBarSymbolDark : titleBarSymbolLight,
     },
     webPreferences: {
       contextIsolation: true,
