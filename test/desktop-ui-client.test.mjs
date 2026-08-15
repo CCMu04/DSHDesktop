@@ -152,7 +152,7 @@ if (!Array.isArray(moduleExports.inject)) throw new Error('inject export missing
 // --- run apply and let the async config convergence settle ----------------
 moduleExports.apply(ctx)
 const allOnIds = () => registered.map((r) => r.entry.options?.id).sort()
-// 视觉增强只有 config 卡片与聊天微调的 open-workspace 条目注册 slot
+// 视觉增强只有 config 卡片与打开工作区按钮条目注册 slot
 // （settingsDrawer 走 effect；sessionLogExport 因测试环境无
 // sessionLogDownload 控制器而只装样式，其按钮注册在独立 id 下不与官方冲突）。
 if (JSON.stringify(allOnIds()) !== JSON.stringify(['dsh-desktop-ui-config', 'open-workspace'])) {
@@ -184,7 +184,7 @@ if (JSON.stringify(remainingStyles) !== JSON.stringify(expectedStyles)) {
 }
 
 // --- a fresh page (reload path) with everything off must also be clean ----
-servedConfig = { settingsDrawer: false, sessionLogExport: false, statsLine: false, chatPolish: false }
+servedConfig = { settingsDrawer: false, sessionLogExport: false, statsLine: false, openWorkspace: false, chatPolish: false }
 registered.length = 0
 headStyles.length = 0
 loaded.length = 0

@@ -46,6 +46,7 @@ window.__ModuleLoader__.load({
       settingsDrawer: true,
       sessionLogExport: true,
       statsLine: true,
+      openWorkspace: true,
       chatPolish: true,
     };
     /** Feature keys in stable order (also the settings-card row order). */
@@ -427,6 +428,9 @@ window.__ModuleLoader__.load({
       "config.statsLine": "统计栏",
       "config.statsLine.desc":
         "输入框下方的统计信息占满整行居中显示，超出部分以省略号收尾",
+      "config.openWorkspace": "打开工作区按钮",
+      "config.openWorkspace.desc":
+        "在页签行右侧显示「打开工作区」按钮，以资源管理器方式打开当前工作区",
       "config.chatPolish": "聊天界面微调",
       "config.chatPolish.desc":
         "思考文案限高可滚动；「载入历史…」提示居中显示",
@@ -465,6 +469,9 @@ window.__ModuleLoader__.load({
       "config.statsLine": "Stats line",
       "config.statsLine.desc":
         "Show the stats row under the input full-width and centered, with an ellipsis for overflow",
+      "config.openWorkspace": "Open workspace button",
+      "config.openWorkspace.desc":
+        "Show an Open workspace button at the tab-row right end to open the current workspace in Explorer",
       "config.chatPolish": "Chat polish",
       "config.chatPolish.desc":
         "Clamp the reasoning text height with a scroll; center the loading-history hint",
@@ -761,8 +768,7 @@ window.__ModuleLoader__.load({
             );
           }
         }
-        if (config.chatPolish) {
-          install(() => installChatPolishCss());
+        if (config.openWorkspace) {
           install(() => installUtilitiesCss());
           install(() => installHeaderActionCss());
           install(() =>
@@ -782,6 +788,9 @@ window.__ModuleLoader__.load({
               ),
             ),
           );
+        }
+        if (config.chatPolish) {
+          install(() => installChatPolishCss());
         }
         if (config.statsLine) {
           install(() => installStatsCss());
