@@ -20,8 +20,8 @@
     "sync:dsh": "node scripts/sync-dsh.mjs",
     "prepare:node": "node scripts/prepare-node-runtime.mjs",
     "prepare:runtime": "node scripts/prepare-runtime.mjs",
-    "dist": "npm run sync:dsh && node scripts/write-plugin-version.mjs && npm run prepare:runtime && npm run prepare:node && electron-builder --win nsis portable --x64",
-    "dist:offline": "npm run prepare:runtime && npm run prepare:node && electron-builder --win nsis portable --x64",
+    "dist": "npm run sync:dsh && node scripts/write-plugin-version.mjs && node scripts/patch-nsis-templates.mjs && npm run prepare:runtime && npm run prepare:node && electron-builder --win nsis portable --x64",
+    "dist:offline": "node scripts/patch-nsis-templates.mjs && npm run prepare:runtime && npm run prepare:node && electron-builder --win nsis portable --x64",
     "dist:x64:offline": "npm run dist:offline",
     "format": "prettier --write main.mjs builtin-plugin.mjs toolchain.mjs runtime-preload.cjs scripts/*.mjs test/*.mjs test/*.cjs plugins/dsh-desktop-ui/lib/*.js"
   },
