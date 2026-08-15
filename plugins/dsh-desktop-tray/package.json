@@ -1,0 +1,25 @@
+{
+  "name": "dsh-desktop-tray",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Desktop tray command bridge: turns tray menu actions (new task / add workspace) into page-side commands with full access to the official client services.",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ]
+    }
+  }
+}

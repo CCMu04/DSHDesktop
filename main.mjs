@@ -16,7 +16,7 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog, Menu, nativeImage, nativeTheme, Notification, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, Menu, nativeImage, nativeTheme, net as electronNet, Notification, shell, Tray } from 'electron'
 import { ensureBundledPlugin } from './builtin-plugin.mjs'
 import { prepareDesktopToolchain } from './toolchain.mjs'
 import {
@@ -26,6 +26,13 @@ import {
   parseCloseBehavior,
   serializeCloseBehavior,
 } from './close-behavior.mjs'
+import {
+  buildUpdateFailedOptions,
+  buildUpdateFoundOptions,
+  buildUpToDateOptions,
+  isUpdateAvailable,
+  LATEST_RELEASE_URL,
+} from './update-check.mjs'
 
 const shellDirectory = path.dirname(fileURLToPath(import.meta.url))
 const runtimePreloadPath = app.isPackaged
@@ -451,12 +458,61 @@ function ensureTray() {
     Menu.buildFromTemplate([
       { label: '显示主窗口', click: showMainWindow },
       { type: 'separator' },
+      { label: '新建任务', click: () => sendTrayCommand('new-session') },
+      { label: '添加工作区', click: () => sendTrayCommand('add-workspace') },
+      { type: 'separator' },
+      { label: '检查更新', click: () => void checkForUpdates() },
+      { type: 'separator' },
       { label: '关闭行为设置…', click: () => void askCloseBehavior() },
       { type: 'separator' },
       { label: '退出', click: () => app.quit() },
     ]),
   )
   tray.on('click', showMainWindow)
+}
+
+// Tray commands run inside the web page: the shell has no IPC bridge into the
+// UI, so the command is dispatched as a DOM event handled by the
+// dsh-desktop-tray plugin, which calls the official client services
+// (workspaces.startSession / pickDirectory / create).
+function sendTrayCommand(command) {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (!isBackendUrl(mainWindow.webContents.getURL())) {
+    showMainWindow()
+    return
+  }
+  void mainWindow.webContents
+    .executeJavaScript(
+      `window.dispatchEvent(new CustomEvent('dsh-desktop-tray-command', { detail: ${JSON.stringify(command)} }))`,
+    )
+    .catch(() => {})
+}
+
+// Update check runs in the main process against the same GitHub Releases
+// source the settings-page updater uses; the result lands in a native dialog.
+async function checkForUpdates() {
+  const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined
+  const currentVersion = app.getVersion()
+  try {
+    const response = await electronNet.fetch(LATEST_RELEASE_URL, {
+      headers: { accept: 'application/vnd.github+json', 'user-agent': 'deepseek-harness-desktop' },
+      signal: AbortSignal.timeout(15_000),
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const release = await response.json()
+    const latestVersion = typeof release?.tag_name === 'string' ? release.tag_name : ''
+    if (latestVersion && isUpdateAvailable(currentVersion, latestVersion)) {
+      const { response: choice } = await dialog.showMessageBox(parent, buildUpdateFoundOptions(currentVersion, release))
+      if (choice === 0 && typeof release?.html_url === 'string') void shell.openExternal(release.html_url)
+    } else {
+      await dialog.showMessageBox(parent, buildUpToDateOptions(currentVersion))
+    }
+  } catch (error) {
+    await dialog.showMessageBox(
+      parent,
+      buildUpdateFailedOptions(error instanceof Error ? error.message : String(error)),
+    )
+  }
 }
 
 function applyCloseBehavior(behavior, remembered) {

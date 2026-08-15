@@ -69,6 +69,7 @@
       "main.mjs",
       "builtin-plugin.mjs",
       "close-behavior.mjs",
+      "update-check.mjs",
       "native-open-bridge.mjs",
       "toolchain.mjs",
       "runtime-preload.cjs",

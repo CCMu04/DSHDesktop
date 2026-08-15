@@ -33,6 +33,7 @@ plugins/dsh-desktop-<name>/
 | 功能增强 | `dsh-desktop-files` | 文件工作台：目录树 + 图片/Markdown/HTML/PDF/代码预览（`desktop.features.item` order 10，注册 workbench `files` 页签与 5 个预览器） |
 | 功能增强 | `dsh-desktop-context-menu` | 右键菜单（`desktop.features.item` order 30） |
 | 功能增强 | `dsh-desktop-notify` | 完成提醒（`desktop.features.item` order 40） |
+| 框架 | `dsh-desktop-tray` | 托盘命令桥：监听主进程注入的 `dsh-desktop-tray-command` DOM 事件（新建任务 / 添加工作区），翻译为官方客户端服务调用（`workspaces.startSession` / `pickDirectory` / `create`） |
 
 功能增强与视觉增强的区别：视觉增强只改外观；功能增强携带真实行为（逻辑 + 可选 UI），且每个功能**独立成插件**，由聚合卡片统一呈现开关。
 

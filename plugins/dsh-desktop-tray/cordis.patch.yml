@@ -1,0 +1,7 @@
+# dsh-desktop-tray bundle patch: mount the plugin row into the web profile.
+# The client half listens for the dsh-desktop-tray-command DOM event dispatched
+# by the Electron main process and executes tray menu actions with the
+# official client services (workspaces.startSession / pickDirectory / create).
+- insert:
+    - id: dsh-desktop-tray
+      name: dsh-desktop-tray
