@@ -692,7 +692,9 @@ async function createWindow() {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    backgroundColor: systemDark ? '#151517' : '#f9fafb',
+    // Matches loading.html which mirrors the official boot screen tokens
+    // (--dsw-alias-bg-base: #ffffff light / #151517 dark).
+    backgroundColor: systemDark ? '#151517' : '#ffffff',
     icon: path.join(shellDirectory, 'assets', 'icon.png'),
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
