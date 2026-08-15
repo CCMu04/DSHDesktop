@@ -1196,7 +1196,7 @@ window.__ModuleLoader__.load({
                     "aria-label": t("panel.toggleTree"),
                     onClick: () => setTreeCollapsed((value) => !value),
                     children: jsx(treeCollapsed ? EyeOffIcon : EyeIcon, {
-                      size: 14,
+                      size: 16,
                     }),
                   }),
                   jsx("button", {
@@ -1211,7 +1211,7 @@ window.__ModuleLoader__.load({
                       loadDir(cwd);
                     },
                     children: jsx(RefreshCwIcon, {
-                      size: 14,
+                      size: 16,
                     }),
                   }),
                 ],
@@ -1266,7 +1266,7 @@ window.__ModuleLoader__.load({
                                 })
                                 .finally(() => setRevealPending(false));
                             },
-                            children: jsx(FolderSearchIcon, { size: 14 }),
+                            children: jsx(FolderSearchIcon, { size: 16 }),
                           }),
                           // 自动换行切换：代码预览长行折行显示。
                           jsx("button", {
@@ -1277,7 +1277,7 @@ window.__ModuleLoader__.load({
                             title: t("panel.toggleWrap"),
                             "aria-label": t("panel.toggleWrap"),
                             onClick: () => setWrapMode((value) => !value),
-                            children: jsx(WrapTextIcon, { size: 14 }),
+                            children: jsx(WrapTextIcon, { size: 16 }),
                           }),
                         ],
                       })

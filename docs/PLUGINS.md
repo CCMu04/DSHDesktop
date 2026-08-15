@@ -26,7 +26,7 @@ plugins/dsh-desktop-<name>/
 
 | 分类 | 插件 | 用途 |
 | --- | --- | --- |
-| 框架 | `dsh-desktop-workbench` | 工作台右侧分栏（AppFrame grid 第四列）与面板布局，提供 `desktop.workbench` 服务（registerTab / registerViewer / openFile），是各功能插件标签页的宿主 |
+| 框架 | `dsh-desktop-workbench` | 工作台对话页右侧分栏（chat 视图内 grid 分栏，页签行 [|] 按钮开关），提供 `desktop.workbench` 服务（registerTab / registerViewer / activateTab / openFile / collapse / toggle），是各功能插件标签页的宿主 |
 | 视觉增强 | `dsh-desktop-ui` | 纯视觉定制（设置抽屉、会话日志导出、统计栏整宽），设置页「插件 > 视觉增强」卡片（`settings.plugin.item`，order 100） |
 | 功能增强聚合 | `dsh-desktop-features` | 「功能增强」聚合卡片（`settings.plugin.item`，order 110），声明并渲染子槽位 `desktop.features.item` |
 | 功能增强 | `dsh-desktop-updates` | 检查更新（`desktop.features.item` order 10 + 设置分区 `settings.section` order 100） |
