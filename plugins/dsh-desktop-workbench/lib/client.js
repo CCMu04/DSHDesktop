@@ -43,10 +43,7 @@ window.__ModuleLoader__.load({
     let _deepseek_ai_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
     const { jsx, jsxs } = react_jsx_runtime;
     const { createElement } = react;
-    const {
-      IconPanelLeftOutline16,
-      IconChevronRightOutline14,
-    } = _deepseek_ai_dsh_client_ui_primitives;
+    const { IconPanelLeftOutline16 } = _deepseek_ai_dsh_client_ui_primitives;
 
     //#region 常量与工具
     const NS = "desktop-workbench";
@@ -126,7 +123,10 @@ window.__ModuleLoader__.load({
     // 不与官方页签行对齐；列高度由 JS 钉在滚动视口内，内容区自行滚动。
     // 打开/关闭由官方 Header 页签行右端的 [|] 按钮控制，无右侧细条按钮。
     const css =
-      ".ddwb_col{border-left:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);flex-direction:column;min-width:0;min-height:0;display:flex;position:relative;overflow:hidden}" +
+      // 注意：宿主 div 与 WorkbenchColumn 根 div 都是 .ddwb_col（宿主是
+      // grid item，内部渲染的列是其 flex 子项）——flex:1 让内层列撑满
+      // 宿主高度（否则内容区只有内容高度，工作台看起来没撑满）。
+      ".ddwb_col{border-left:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);flex:1;flex-direction:column;min-width:0;min-height:0;display:flex;position:relative;overflow:hidden}" +
       // 拖拽调宽期间禁用对话页根的布局过渡（不跟手根因：官方 root 可能有
       // grid-template-columns transition，每帧改宽度被动画拖着走）。
       "[data-phase][data-ddwb-dragging]{transition:none!important}" +
@@ -134,19 +134,16 @@ window.__ModuleLoader__.load({
       ".ddwb_tabsRow{flex:1;min-width:0;z-index:1;position:relative;display:flex;align-items:flex-end;gap:6px}" +
       ".ddwb_tabs{flex:1;min-width:0;display:flex;align-items:flex-end;gap:14px;overflow-x:auto;scrollbar-width:none}" +
       ".ddwb_tabs::-webkit-scrollbar{display:none}" +
-      ".ddwb_toolBtn{appearance:none;flex:none;width:22px;height:22px;margin-bottom:5px;border:0;border-radius:6px;background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}" +
-      ".ddwb_toolBtn:hover:not(:disabled),.ddwb_toolBtn:focus-visible{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}" +
       ".ddwb_tab{color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;padding:0 0 7px;font-size:13px;font-weight:500;line-height:16px;white-space:nowrap;position:relative;display:inline-flex;align-items:center;gap:6px}" +
+      ".ddwb_tabBadge{min-width:16px;background:var(--dsw-alias-brand-primary);color:var(--dsw-alias-bg-layer-1);border-radius:999px;padding:0 5px;font-size:10px;line-height:16px;text-align:center}" +
       ".ddwb_tabIcon{display:inline-flex;color:var(--dsw-alias-label-tertiary)}" +
       ".ddwb_tab:hover:not(:disabled),.ddwb_tab:focus-visible{color:var(--dsw-alias-label-primary)}" +
       ".ddwb_tab:after{content:\"\";background:0 0;border-radius:2px;height:2px;position:absolute;bottom:1px;left:0;right:0}" +
       ".ddwb_tabActive{color:var(--dsw-alias-label-primary)}" +
       ".ddwb_tabActive:after{background:var(--dsw-alias-brand-primary)}" +
-      ".ddwb_tabBadge{min-width:16px;background:var(--dsw-alias-brand-primary);color:var(--dsw-alias-bg-layer-1);border-radius:999px;padding:0 5px;font-size:10px;line-height:16px;text-align:center}" +
-      ".ddwb_handle{cursor:col-resize;z-index:3;touch-action:none;width:8px;margin-left:-4px;position:absolute;top:0;bottom:0;left:0;background:0 0;border:none;padding:0;display:grid;place-items:center;transition:background var(--ds-transition-duration-slow) var(--ds-ease-in-out)}" +
-      ".ddwb_handle:hover,.ddwb_handle:active,.ddwb_handle:focus-visible{background:var(--dsw-alias-interactive-bg-hover)}" +
-      ".ddwb_handle:after{content:\"\";box-sizing:border-box;width:2px;height:100%;border-radius:2px;background:var(--dsw-alias-border-l2);transition:background var(--ds-transition-duration-slow) var(--ds-ease-in-out)}" +
-      ".ddwb_handle:hover:after,.ddwb_handle:active:after,.ddwb_handle:focus-visible:after{background:var(--dsw-alias-brand-primary)}" +
+      // 拖拽热区：完全透明（视觉上就是列左缘那条分割线本身），仅保留
+      // col-resize 光标与 8px 命中宽度；无 hover 高亮、无竖线装饰。
+      ".ddwb_handle{cursor:col-resize;z-index:3;touch-action:none;width:8px;margin-left:-4px;position:absolute;top:0;bottom:0;left:0;background:0 0;border:none;padding:0}" +
       ".ddwb_body{flex:1;min-height:0;overflow:auto}" +
       ".ddwb_placeholder{padding:24px 16px;text-align:center;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.6}" +
       ".ddwb_placeholderTitle{display:block;color:var(--dsw-alias-label-secondary);font-size:14px;font-weight:600;margin-bottom:4px}" +
@@ -558,12 +555,10 @@ window.__ModuleLoader__.load({
                   ? body.layout
                   : null;
               setLayout((prev) => ({
-                // 会话加载一律默认收起；宽度与活动页签仍按上次记忆。
+                // 会话加载一律默认收起；宽度按上次记忆，活动页签与打开文件
+                // 一律重置（避免不同会话/项目之间内容串扰）。
                 width: ddwbClampWidth(saved?.width ?? prev.width),
-                activeTabId:
-                  saved && typeof saved.activeTabId === "string"
-                    ? saved.activeTabId
-                    : prev.activeTabId,
+                activeTabId: null,
                 file: null,
               }));
               setReady(true);
@@ -605,6 +600,14 @@ window.__ModuleLoader__.load({
               setReady(true);
               return;
             }
+            // 切换会话：关闭工作台并重置内容状态，避免展示上一个会话
+            // （不同项目）的文件/页签内容。
+            service.setOpen(false);
+            setLayout((prev) => ({
+              ...prev,
+              activeTabId: null,
+              file: null,
+            }));
             applyLayout(id);
           };
           try {
@@ -699,9 +702,8 @@ window.__ModuleLoader__.load({
       return jsxs("div", {
         className: "ddwb_col",
         children: [
-          // 左边缘拖拽条：常驻长条（无图标），拖拽调宽——按下时缓存基准
-          // 宽度，拖拽中 rAF 节流后直接写轨道（不经过 React state），
-          // 松手收敛一次状态触发持久化；无位移的按下释放 = 点击 → 收起。
+          // 左边缘拖拽条：完全透明热区（8px 宽），视觉上就是中间那条
+          // 分割线本身——拖拽调宽；不做点击收起（收起统一走 Header [|] 按钮）。
           jsx("button", {
             type: "button",
             className: "ddwb_handle",
@@ -775,10 +777,8 @@ window.__ModuleLoader__.load({
                   // 拖拽结束：收敛一次状态（触发布局持久化），列宽已实时写入轨道。
                   setLayout((prev) => ({ ...prev, width: drag.lastWidth }));
                 }
-              } else {
-                // 未产生位移 = 点击 → 收起。
-                service.setOpen(false);
               }
+              // 无位移的按下释放（点击）不做收起——统一走 Header [|] 按钮。
             },
           }),
           jsxs("div", {
@@ -824,18 +824,7 @@ window.__ModuleLoader__.load({
                       ),
                     ),
                   }),
-                  // 右侧工具按钮：关闭工作台（收起面板，轨道归 0）。
-                  jsx("button", {
-                    type: "button",
-                    className: "ddwb_toolBtn",
-                    "aria-label": t("closePanel"),
-                    title: t("closePanel"),
-                    onClick: () => service.setOpen(false),
-                    children: jsx(IconChevronRightOutline14, {
-                      size: 14,
-                      "aria-hidden": true,
-                    }),
-                  }),
+                  // 无关闭按钮：收起统一走 Header [|] 按钮。
                 ],
               }),
             ],

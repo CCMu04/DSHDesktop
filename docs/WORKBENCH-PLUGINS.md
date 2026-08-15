@@ -30,8 +30,9 @@ better-sidebar 把「侧边栏框架 + 7 个 Tab + 6 种文件预览器」塞进
 
 > ✅ 已实现并定稿（`plugins/dsh-desktop-workbench/`）。落地形态见下。
 
-- **形态：对话页内部右侧分栏（chat 视图内 grid 分栏）**。工作台作为官方 ChatView 根内的第二列挂载——位于聊天界面对话页的右边、官方「对话 / 轨迹」页签栏下方；**只有对话页签激活时显示**（conversation.view 槽位按激活视图渲染，切换到轨迹页签时 ChatView 卸载，工作台随之消失，切回对话页自动恢复）。列高钉在对话区滚动视口内（sticky），消息流滚动时工作台保持可见；列顶是紧凑页签栏（文件 / Git …），**不显示「工作台」标题字样**，页签栏不与官方页签行对齐。
-- **打开方式：官方 Header 页签行右端的 [|] 按钮**。工作台在 `conversation.session.header.utilities` 槽位注册 `workbench-toggle`（order 35，与打开工作区 / 导出会话按钮同排），使用官方 `IconPanelLeftOutline16`（[|] 面板图标）；点击切换开合，打开时按钮高亮（品牌色）。无右侧细条按钮。
+- **形态：对话页内部右侧分栏（chat 视图内 grid 分栏）**。工作台作为官方对话页根（`[data-phase]`）的第二列挂载、与 scrollBody 平级——位于聊天界面对话页的右边、官方「对话 / 轨迹」页签栏下方；**只有对话页签激活时显示**（conversation.view 槽位按激活视图渲染，切换到轨迹页签时 ChatView 卸载，工作台隐藏，切回对话页恢复）。列不在滚动容器内：聊天文本区滚动条留在其右缘、工作台滚轮只滚动自身内容；列高由 grid 第二行 stretch 决定，撑满对话区视口；列顶是紧凑页签栏（文件 / Git …），**不显示「工作台」标题字样**，页签栏不与官方页签行对齐，也无关闭按钮（收起统一走 [|] 按钮）。
+- **打开方式：官方 Header 页签行右端的 [|] 按钮**。工作台在 `conversation.session.header.utilities` 槽位注册 `workbench-toggle`（order 35，与打开工作区 / 导出会话按钮同排同风格），使用官方 `IconPanelLeftOutline16` 水平翻转（右侧面板样式）；点击切换开合，打开时按钮高亮（品牌色）。无右侧细条按钮。
+- **拖拽调宽**：列左缘 8px 透明热区（视觉上就是聊天区与工作台之间的分割线），拖动期间给对话页根加 `data-ddwb-dragging` 禁用官方布局过渡（实时跟手）；不做点击收起、窄拖自动收起；钳制 240–720，防抖持久化。
 - **服务**：`ctx.provide('desktop.workbench', service)`，消费方 `inject: ['desktop.workbench']`：
 
 ```js
@@ -51,7 +52,7 @@ service.subscribe(listener) / service.onAction(handler)  // 均返回 disposer
 ```
 
 - **主页签栏只承载功能页签**（文件 / Git 等，由各功能插件注册；框架自身不内置任何页签）。打开的文件**不在主页签栏显示**——由功能插件在自己的页签内容区内实现子页签（如 files 插件的文件子页签分页预览）。`openFile` / `registerViewer` 为对外契约（供未来生态使用），当前 files 插件在内部实现文件预览，不占用主页签。
-- 开合状态由服务持有（Header 按钮与列组件共享），视图切换后重新挂载时恢复；框架关闭（enabled=false）时列不挂载、按钮不注册；会话级布局（开合 / 宽度 / 激活页签 / 打开的文件）按会话经 `/api/desktop-workbench/layout` 持久化，会话加载时默认收起以避免插件初始化竞态。
+- 开合状态由服务持有（Header 按钮与列组件共享），视图切换后重新挂载时恢复；**切换会话自动关闭工作台并重置页签/文件内容**（避免不同会话/项目内容串扰）；框架关闭（enabled=false）时列不挂载、按钮不注册；会话级布局（开合 / 宽度）按会话经 `/api/desktop-workbench/layout` 持久化，会话加载时默认收起以避免插件初始化竞态。
 - **host**：`/api/desktop-workbench/config`（框架总开关，走 §4 通用约定）+ `/api/desktop-workbench/layout`（GET/POST 会话布局持久化到 `$DSH_HOME/desktop-workbench.json`，与开关共用同一文件、原子写入；宽度钳制 240–720、每会话布局 ≤ 32 KiB、最多 200 个会话）。
 - Tab 组件渲染时收到 `{ ctx, service, t }`，viewer 组件收到 `{ path, t }`；`t` 为工作台词典的翻译函数。
 
