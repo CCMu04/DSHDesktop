@@ -529,6 +529,8 @@ window.__ModuleLoader__.load({
         });
         if (!infoRes.ok) return;
         const infoBody = await infoRes.json();
+        // 安装版由主进程 electron-updater 负责自动更新，这里只处理便携版，避免双重通知。
+        if (infoBody?.installKind !== "portable") return;
         const currentVersion =
           typeof infoBody?.currentVersion === "string"
             ? infoBody.currentVersion

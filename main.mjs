@@ -502,6 +502,8 @@ function stopBackend() {
 function initAutoUpdater() {
   // 仅打包版本启用自动更新（开发模式无发布通道）。
   if (!app.isPackaged) return
+  // 便携版无法静默替换运行中的 exe：跳过自动更新，改用设置里的手动「检查更新」。
+  if (process.env.PORTABLE_EXECUTABLE_DIR) return
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
   autoUpdater.on('update-downloaded', (info) => {
