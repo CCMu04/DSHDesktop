@@ -34,6 +34,7 @@ import {
   isUpdateAvailable,
   LATEST_RELEASE_URL,
 } from './update-check.mjs'
+import { clearAutoCheck, recordAutoCheck, shouldAutoCheck } from './update-throttle.mjs'
 import {
   parseWindowState,
   sanitizeWindowState,
@@ -821,7 +822,14 @@ function initAutoUpdater() {
   autoUpdater.on('error', (error) => {
     // 静默记录：自动更新失败不影响正常使用，可到 设置 → 检查更新 手动检查。
     appendBackendOutput(`Auto-update error: ${String(error)}\n`)
+    // 失败（网络 / GitHub API 限流）时清除节流记录，下次启动立即重试。
+    clearAutoCheck()
   })
+  autoUpdater.on('update-available', () => recordAutoCheck())
+  autoUpdater.on('update-not-available', () => recordAutoCheck())
+  // GitHub 未认证 API 限流保护：成功检查后 1 小时内不再重复检查，
+  // 避免每次启动都消耗配额（运营商 NAT 下多用户共享出口 IP）。
+  if (!shouldAutoCheck()) return
   autoUpdater.checkForUpdates().catch(() => {})
 }
 

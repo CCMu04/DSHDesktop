@@ -106,14 +106,98 @@ window.__ModuleLoader__.load({
     //#endregion
 
     //#region 自动检查辅助
-    /** 抓取 GitHub Releases 最新版本；失败返回 null。 */
-    function fetchLatestRelease() {
-      return fetch(
-        "https://api.github.com/repos/CCMu04/DSHDesktop/releases/latest",
-        { headers: { accept: "application/vnd.github+json" } },
-      )
+    /** GitHub Releases API（未认证，60 次/小时/IP；配合本地缓存降低占用）。 */
+    const LATEST_RELEASE_URL =
+      "https://api.github.com/repos/CCMu04/DSHDesktop/releases/latest";
+    /** 最新版本缓存有效期：1 小时。 */
+    const LATEST_CACHE_TTL_MS = 60 * 60 * 1000;
+
+    /** 读取本地最新版本缓存（host 持久化，跨重启可用）；无缓存/损坏返回 null。 */
+    function readLatestCache() {
+      return fetch("/api/desktop-updates/latest-cache", {
+        headers: { accept: "application/json" },
+        cache: "no-store",
+      })
         .then((res) => (res.ok ? res.json() : null))
+        .then((body) =>
+          body !== null &&
+          typeof body === "object" &&
+          typeof body?.tag_name === "string"
+            ? body
+            : null,
+        )
         .catch(() => null);
+    }
+
+    /** 写入本地最新版本缓存（host 持久化，跨重启可用）。 */
+    function writeLatestCache(entry) {
+      return fetch("/api/desktop-updates/latest-cache", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(entry),
+      }).catch(() => {});
+    }
+
+    /**
+     * 抓取 GitHub Releases 最新版本（走系统代理），带 1 小时本地缓存：
+     *   - 缓存未过期 → 直接返回缓存，不打 GitHub API；
+     *   - 请求成功 → 精简字段后写缓存并返回；
+     *   - 请求失败 → 有缓存则用旧缓存兜底，无缓存返回 { error: 原因 }。
+     */
+    async function fetchLatestRelease() {
+      const cache = await readLatestCache();
+      if (
+        cache !== null &&
+        Date.now() - Number(cache.fetchedAt ?? 0) < LATEST_CACHE_TTL_MS
+      ) {
+        return cache;
+      }
+      try {
+        const res = await fetch(LATEST_RELEASE_URL, {
+          headers: { accept: "application/vnd.github+json" },
+        });
+        if (res.ok) {
+          const body = await res.json();
+          if (body === null || typeof body?.tag_name !== "string") {
+            return cache ?? { error: "invalid" };
+          }
+          const entry = {
+            tag_name: body.tag_name,
+            html_url:
+              typeof body.html_url === "string" ? body.html_url : "",
+            published_at:
+              typeof body.published_at === "string" ? body.published_at : "",
+            body:
+              typeof body.body === "string" ? body.body.slice(0, 16 * 1024) : "",
+            assets: Array.isArray(body.assets)
+              ? body.assets
+                  .filter(
+                    (a) => typeof a?.browser_download_url === "string",
+                  )
+                  .slice(0, 32)
+                  .map((a) => ({
+                    browser_download_url: a.browser_download_url,
+                  }))
+              : [],
+            fetchedAt: Date.now(),
+          };
+          void writeLatestCache(entry);
+          return entry;
+        }
+        return cache ?? { error: "http-" + res.status };
+      } catch {
+        return cache ?? { error: "network" };
+      }
+    }
+    /** 检查失败提示：按原因给可操作的文案。 */
+    function checkFailedMessage(t, reason) {
+      if (reason === "http-403" || reason === "http-429") {
+        return t("updates.checkFailedLimit");
+      }
+      if (reason === "network") {
+        return t("updates.checkFailedNetwork");
+      }
+      return t("updates.checkFailed");
     }
     /** 按安装方式挑选下载资产（便携版→portable，安装版→setup，兜底任意 .exe）。 */
     function pickAsset(assets, installKind) {
@@ -185,11 +269,17 @@ window.__ModuleLoader__.load({
       const check = () => {
         if (checking) return;
         setChecking(true);
-        // 最新版本走 GitHub Releases（经系统代理）。
+        // 最新版本走 GitHub Releases（经系统代理）；带 1 小时本地缓存与失败兜底。
         fetchLatestRelease().then((latest) => {
           setChecking(false);
           if (latest === null || typeof latest?.tag_name !== "string") {
-            showToast("error", t("updates.checkFailed"));
+            showToast(
+              "error",
+              checkFailedMessage(
+                t,
+                typeof latest?.error === "string" ? latest.error : "",
+              ),
+            );
             return;
           }
           const currentVersion = info?.currentVersion ?? null;
@@ -381,6 +471,8 @@ window.__ModuleLoader__.load({
       "updates.checking": "正在检查…",
       "updates.upToDate": "已是最新版本",
       "updates.checkFailed": "检查更新失败，请稍后重试",
+      "updates.checkFailedLimit": "检查更新失败（GitHub 接口限流，请稍后再试）",
+      "updates.checkFailedNetwork": "检查更新失败（网络连接异常，请检查网络或代理设置）",
       "updates.updateAvailable": "发现新版本",
       "updates.releasedAt": "发布于",
       "updates.releaseNotes": "更新说明：",
@@ -404,6 +496,10 @@ window.__ModuleLoader__.load({
       "updates.checking": "Checking…",
       "updates.upToDate": "You are up to date",
       "updates.checkFailed": "Update check failed, please try again later",
+      "updates.checkFailedLimit":
+        "Update check failed (GitHub API rate limit, please try again later)",
+      "updates.checkFailedNetwork":
+        "Update check failed (network error, please check your connection or proxy)",
       "updates.updateAvailable": "New version available",
       "updates.releasedAt": "Released",
       "updates.releaseNotes": "Release notes:",

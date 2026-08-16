@@ -6,9 +6,12 @@
  *   - GET /api/desktop-updates/config  → { enabled }
  *   - POST /api/desktop-updates/config → 写开关
  *   - GET /api/desktop-updates/version → { currentVersion }（构建时注入）
+ *   - GET/POST /api/desktop-updates/latest-cache → 最新版本缓存读写
+ *     （~/.dsh/desktop-updates-cache.json，客户端 1 小时 TTL，降低
+ *     GitHub 未认证 API 限流压力；检查失败时用旧缓存兜底）
  *
  * 最新版本检查由浏览器端直接请求 GitHub Releases API（走系统代理），
- * host 只负责当前版本与开关。
+ * host 只负责当前版本、开关与缓存。
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -63,6 +66,63 @@ function writeOverrides(section) {
     "utf8",
   );
   renameSync(temporaryPath, target);
+}
+
+/** 最新版本缓存文档路径。 */
+function latestCachePath() {
+  return join(updatesHomeDir(), "desktop-updates-cache.json");
+}
+
+/** 容错读取最新版本缓存；缺失/损坏/形状不符 → null。 */
+function readLatestCache() {
+  try {
+    const raw = JSON.parse(readFileSync(latestCachePath(), "utf8"));
+    if (
+      typeof raw === "object" &&
+      raw !== null &&
+      typeof raw.tag_name === "string" &&
+      typeof raw.fetchedAt === "number"
+    ) {
+      return raw;
+    }
+  } catch {}
+  return null;
+}
+
+/** 校验并写入最新版本缓存（只保留客户端字段的子集，防止文件膨胀）。 */
+function writeLatestCache(body) {
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    typeof body.tag_name !== "string" ||
+    typeof body.fetchedAt !== "number"
+  ) {
+    return false;
+  }
+  const entry = {
+    tag_name: body.tag_name.slice(0, 128),
+    fetchedAt: body.fetchedAt,
+  };
+  if (typeof body.html_url === "string") entry.html_url = body.html_url.slice(0, 512);
+  if (typeof body.published_at === "string") entry.published_at = body.published_at.slice(0, 64);
+  if (typeof body.body === "string") entry.body = body.body.slice(0, 16 * 1024);
+  if (Array.isArray(body.assets)) {
+    entry.assets = body.assets
+      .filter(
+        (a) =>
+          typeof a === "object" &&
+          a !== null &&
+          typeof a.browser_download_url === "string",
+      )
+      .slice(0, 32)
+      .map((a) => ({ browser_download_url: a.browser_download_url.slice(0, 512) }));
+  }
+  mkdirSync(updatesHomeDir(), { recursive: true });
+  const target = latestCachePath();
+  const temporaryPath = `${target}.${process.pid}.tmp`;
+  writeFileSync(temporaryPath, `${JSON.stringify(entry)}\n`, "utf8");
+  renameSync(temporaryPath, target);
+  return true;
 }
 
 /** 当前桌面壳版本（构建时由 scripts/write-plugin-version.mjs 生成）。 */
@@ -221,6 +281,46 @@ export function apply(ctx, config = {}) {
           return;
         }
         res.end(body);
+      },
+    },
+    {
+      kind: "exact",
+      path: "/api/desktop-updates/latest-cache",
+      handler: (req, res) => {
+        if (req.method === "GET" || req.method === "HEAD") {
+          const cached = readLatestCache();
+          const body = JSON.stringify(cached ?? {});
+          res.writeHead(200, {
+            "content-type": "application/json; charset=utf-8",
+            "content-length": String(Buffer.byteLength(body)),
+            "cache-control": "no-cache",
+          });
+          if (req.method === "HEAD") {
+            res.end();
+            return;
+          }
+          res.end(body);
+          return;
+        }
+        if (req.method === "POST") {
+          readJsonBody(req).then(
+            (body) => {
+              if (!writeLatestCache(body)) {
+                json(res, 400, { ok: false, error: "invalid-cache-entry" });
+                return;
+              }
+              json(res, 200, { ok: true });
+            },
+            (error) => {
+              json(res, 400, {
+                ok: false,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            },
+          );
+          return;
+        }
+        json(res, 405, { ok: false, error: "method-not-allowed" });
       },
     },
   ];

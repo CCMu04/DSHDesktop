@@ -32,9 +32,10 @@ const ctx = {
 }
 
 apply(ctx, {})
-if (routes.length !== 2) throw new Error(`expected 2 routes, got ${routes.length}`)
+if (routes.length !== 3) throw new Error(`expected 3 routes, got ${routes.length}`)
 if (routes.some((r) => r.path === '/api/desktop-updates/config') !== true) throw new Error('config route missing')
 if (routes.some((r) => r.path === '/api/desktop-updates/version') !== true) throw new Error('version route missing')
+if (routes.some((r) => r.path === '/api/desktop-updates/latest-cache') !== true) throw new Error('latest-cache route missing')
 
 const server = http.createServer((req, res) => {
   const route = routes.find((r) => r.path === req.url)
@@ -91,6 +92,44 @@ if (
 ) {
   throw new Error(`version wrong: ${JSON.stringify(r)}`)
 }
+
+// latest-cache: empty by default
+r = await getJson('/api/desktop-updates/latest-cache')
+if (r.status !== 200 || Object.keys(r.body).length !== 0) {
+  throw new Error(`empty cache wrong: ${JSON.stringify(r)}`)
+}
+
+// latest-cache: rejects malformed entries
+r = await postJson('/api/desktop-updates/latest-cache', { tag_name: 42 })
+if (r.status !== 400) throw new Error(`bad entry should 400, got ${r.status}`)
+
+// latest-cache: valid entry round-trips (sanitized subset only)
+const entry = {
+  tag_name: 'v0.1.0-rc.6.6.3',
+  fetchedAt: 123456,
+  html_url: 'https://github.com/CCMu04/DSHDesktop/releases/tag/v0.1.0-rc.6.6.3',
+  published_at: '2026-08-16T00:00:00Z',
+  body: 'release notes '.repeat(1000),
+  assets: [
+    { browser_download_url: 'https://example.com/setup.exe', extra: 'dropped' },
+    { browser_download_url: 42 },
+  ],
+  junk: 'dropped',
+}
+r = await postJson('/api/desktop-updates/latest-cache', entry)
+if (r.status !== 200) throw new Error(`cache POST failed: ${JSON.stringify(r)}`)
+r = await getJson('/api/desktop-updates/latest-cache')
+if (r.body.tag_name !== entry.tag_name || r.body.fetchedAt !== entry.fetchedAt) {
+  throw new Error(`cache round-trip wrong: ${JSON.stringify(r)}`)
+}
+if (r.body.junk !== undefined || r.body.assets?.length !== 1) {
+  throw new Error(`cache sanitize wrong: ${JSON.stringify(r)}`)
+}
+if (r.body.assets[0]?.extra !== undefined || typeof r.body.body !== 'string') {
+  throw new Error(`cache asset sanitize wrong: ${JSON.stringify(r)}`)
+}
+const cacheFile = JSON.parse(readFileSync(join(home, 'desktop-updates-cache.json'), 'utf8'))
+if (cacheFile.tag_name !== entry.tag_name) throw new Error(`cache file wrong: ${JSON.stringify(cacheFile)}`)
 
 server.close()
 await once(server, 'close')
