@@ -30,7 +30,8 @@ plugins/dsh-desktop-<name>/
 | 视觉增强 | `dsh-desktop-ui` | 纯视觉定制（设置抽屉、会话日志导出、统计栏整宽），设置页「插件 > 视觉增强」卡片（`settings.plugin.item`，order 100） |
 | 功能增强聚合 | `dsh-desktop-features` | 「功能增强」聚合卡片（`settings.plugin.item`，order 110），声明并渲染子槽位 `desktop.features.item` |
 | 功能增强 | `dsh-desktop-updates` | 检查更新（`desktop.features.item` order 10 + 设置分区 `settings.section` order 100） |
-| 功能增强 | `dsh-desktop-files` | 文件工作台：目录树 + 图片/Markdown/HTML/PDF/代码预览（`desktop.features.item` order 10，注册 workbench `files` 页签与 5 个预览器） |
+| 功能增强 | `dsh-desktop-files` | 文件工作台：目录树 + 文件子页签预览（图片 / 视频 / 音频 / Markdown / PDF / 代码高亮 / JSON，`desktop.features.item` order 10，注册 workbench `files` 页签；预览器由插件内部注册表管理，不注册进 workbench 服务） |
+| 功能增强 | `dsh-desktop-git` | Git 面板：分支 / 暂存区与工作区文件列表 / unified diff / 暂存提交 / 历史（`desktop.features.item` order 30，注册 workbench `git` 页签；host 端 `/api/desktop-git/*` 纯 CLI 代理，会话 cwd 白名单校验） |
 | 功能增强 | `dsh-desktop-context-menu` | 右键菜单（`desktop.features.item` order 30） |
 | 功能增强 | `dsh-desktop-notify` | 完成提醒（`desktop.features.item` order 40） |
 | 框架 | `dsh-desktop-tray` | 托盘命令桥：监听主进程注入的 `dsh-desktop-tray-command` DOM 事件（新建任务 / 添加工作区），翻译为官方客户端服务调用（`workspaces.startSession` / `pickDirectory` / `create`） |
