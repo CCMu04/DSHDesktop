@@ -71,7 +71,7 @@ window.__ModuleLoader__.load({
     };
     // 「检查更新」分区面板样式 + 原生更新弹窗样式。
     const updatesCss =
-      ".dduiU_section{width:100%;max-width:760px;color:var(--dsw-alias-label-primary);flex-direction:column;gap:16px;display:flex}.dduiU_block{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;flex-direction:column;gap:12px;padding:14px 16px;display:flex}.dduiU_row{align-items:center;justify-content:space-between;gap:12px;display:flex}.dduiU_rowLabel{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}.dduiU_rowValue{color:var(--dsw-alias-label-primary);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.5}.dduiU_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}@keyframes dduiU_fadeIn{from{opacity:0}}@keyframes dduiU_progressFlow{0%{background-position:0 0}100%{background-position:24px 0}}.dduiU_dlgOverlay{position:fixed;inset:0;z-index:3000;display:none;align-items:center;justify-content:center;padding:24px;animation:dduiU_fadeIn .15s ease-out}.dduiU_dlgMask{position:absolute;inset:0;background:rgba(0,0,0,.24);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}.dduiU_dlgPanel{position:relative;z-index:1;display:flex;flex-direction:column;gap:14px;width:min(400px,100%);max-height:calc(100vh - 48px);overflow:auto;box-sizing:border-box;padding:22px 24px 24px;border-radius:24px;border:1px solid var(--dsw-alias-border-inverted);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-shadow-lv3);color:var(--dsw-alias-label-primary);font-size:14px}.dduiU_dlgHeader{display:flex;align-items:center;justify-content:space-between;gap:8px}.dduiU_dlgTitle{margin:0;font-size:16px;line-height:24px;font-weight:500;color:var(--dsw-alias-label-primary)}.dduiU_dlgClose{flex:none;width:28px;height:28px;border:none;border-radius:8px;background:transparent;cursor:pointer;color:var(--dsw-alias-label-secondary);font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center}.dduiU_dlgClose:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.dduiU_dlgVersionRow{display:flex;align-items:center;gap:8px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-secondary)}.dduiU_dlgVersionRow .dduiU_dlgArrow{color:var(--dsw-alias-label-tertiary)}.dduiU_dlgVersionRow .dduiU_dlgNew{color:var(--dsw-alias-state-info-primary,#3b82f6);font-weight:600}.dduiU_dlgDesc{margin:0;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);word-break:break-word}.dduiU_dlgNotes{max-height:180px;overflow:auto;box-sizing:border-box;padding:10px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word}.dduiU_dlgBody{display:flex;flex-direction:column;min-width:0;gap:10px}.dduiU_dlgFooter{display:flex;align-items:center;justify-content:flex-end;gap:8px}.dduiU_dlgBtn{height:36px;padding:0 16px;border-radius:12px;font-size:14px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-family:inherit;background:transparent;border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);transition:background .12s ease-out}.dduiU_dlgBtn:hover{background:var(--dsw-alias-interactive-bg-hover)}.dduiU_dlgBtnPrimary{background:var(--dsw-alias-button-elevated-fill);border:1px solid transparent;color:var(--dsw-alias-label-primary);transition:filter .12s ease-out}.dduiU_dlgBtnPrimary:hover{filter:brightness(1.08);background:var(--dsw-alias-button-elevated-fill)}.dduiU_dlgProgress{height:6px;border-radius:3px;background:var(--dsw-alias-bg-layer-2);overflow:hidden}.dduiU_dlgProgressBar{height:100%;border-radius:3px;background:linear-gradient(90deg,#3b82f6,#60a5fa);background-size:24px 100%;animation:dduiU_progressFlow .8s linear infinite;transition:width .15s ease-out}.dduiU_dlgProgressText{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5}.dduiU_dlgRemind{display:flex;align-items:center;gap:8px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.5;cursor:pointer}.dduiU_dlgRemind input{accent-color:var(--dsw-alias-state-info-primary,#3b82f6);width:14px;height:14px;margin:0;cursor:pointer}";
+      ".dduiU_section{width:100%;max-width:760px;color:var(--dsw-alias-label-primary);flex-direction:column;gap:16px;display:flex}.dduiU_block{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;flex-direction:column;gap:12px;padding:14px 16px;display:flex}.dduiU_row{align-items:center;justify-content:space-between;gap:12px;display:flex}.dduiU_rowLabel{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}.dduiU_rowValue{color:var(--dsw-alias-label-primary);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.5}.dduiU_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}@keyframes dduiU_fadeIn{from{opacity:0}}@keyframes dduiU_progressFlow{0%{background-position:0 0}100%{background-position:24px 0}}.dduiU_dlgOverlay{position:fixed;inset:0;z-index:3000;display:none;align-items:center;justify-content:center;padding:24px;animation:dduiU_fadeIn .15s ease-out}.dduiU_dlgMask{position:absolute;inset:0;background:rgba(0,0,0,.24);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}.dduiU_dlgPanel{position:relative;z-index:1;display:flex;flex-direction:column;gap:14px;width:min(400px,100%);max-height:calc(100vh - 48px);overflow:auto;box-sizing:border-box;padding:22px 24px 24px;border-radius:24px;border:1px solid var(--dsw-alias-border-inverted);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-shadow-lv3);color:var(--dsw-alias-label-primary);font-size:14px}.dduiU_dlgHeader{display:flex;align-items:center;justify-content:space-between;gap:8px}.dduiU_dlgTitle{margin:0;font-size:16px;line-height:24px;font-weight:500;color:var(--dsw-alias-label-primary)}.dduiU_dlgClose{flex:none;width:28px;height:28px;border:none;border-radius:8px;background:transparent;cursor:pointer;color:var(--dsw-alias-label-secondary);font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center}.dduiU_dlgClose:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.dduiU_dlgVersionRow{display:flex;align-items:center;gap:8px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-secondary)}.dduiU_dlgVersionRow .dduiU_dlgArrow{color:var(--dsw-alias-label-tertiary)}.dduiU_dlgVersionRow .dduiU_dlgNew{color:var(--dsw-alias-state-info-primary,#3b82f6);font-weight:600}.dduiU_dlgDesc{margin:0;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);word-break:break-word}.dduiU_dlgNotes{max-height:180px;overflow:auto;box-sizing:border-box;padding:10px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.6;word-break:break-word}.dduiU_dlgNotes a{color:var(--dsw-alias-state-info-primary,#3b82f6);text-decoration:none}.dduiU_dlgNotes a:hover{text-decoration:underline}.dduiU_dlgNotes ul{margin:4px 0;padding-left:20px}.dduiU_dlgNotes li{margin:2px 0}.dduiU_dlgNotes p{margin:4px 0}.dduiU_dlgNotes h1,.dduiU_dlgNotes h2,.dduiU_dlgNotes h3{font-size:14px;font-weight:600;margin:8px 0 4px}.dduiU_dlgNotes h4,.dduiU_dlgNotes h5,.dduiU_dlgNotes h6{font-size:13px;font-weight:600;margin:6px 0 4px}.dduiU_dlgNotes code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l2);border-radius:4px;padding:1px 4px}.dduiU_dlgNotes hr{border:none;border-top:1px solid var(--dsw-alias-border-l2);margin:8px 0}.dduiU_dlgBody{display:flex;flex-direction:column;min-width:0;gap:10px}.dduiU_dlgFooter{display:flex;align-items:center;justify-content:flex-end;gap:8px}.dduiU_dlgBtn{height:36px;padding:0 16px;border-radius:12px;font-size:14px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-family:inherit;background:transparent;border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);transition:background .12s ease-out}.dduiU_dlgBtn:hover{background:var(--dsw-alias-interactive-bg-hover)}.dduiU_dlgBtnPrimary{background:var(--dsw-alias-button-elevated-fill);border:1px solid transparent;color:var(--dsw-alias-label-primary);transition:filter .12s ease-out}.dduiU_dlgBtnPrimary:hover{filter:brightness(1.08);background:var(--dsw-alias-button-elevated-fill)}.dduiU_dlgProgress{height:6px;border-radius:3px;background:var(--dsw-alias-bg-layer-2);overflow:hidden}.dduiU_dlgProgressBar{height:100%;border-radius:3px;background:linear-gradient(90deg,#3b82f6,#60a5fa);background-size:24px 100%;animation:dduiU_progressFlow .8s linear infinite;transition:width .15s ease-out}.dduiU_dlgProgressText{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5}.dduiU_dlgRemind{display:flex;align-items:center;gap:8px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.5;cursor:pointer}.dduiU_dlgRemind input{accent-color:var(--dsw-alias-state-info-primary,#3b82f6);width:14px;height:14px;margin:0;cursor:pointer}";
     const updatesTagId = "dsh-desktop-updates/UpdatesSection.module.css";
     const installUpdatesCss = () => dduInstallCss(updatesCss, updatesTagId);
     // 侧边栏底部「更新」按钮样式。footer 槽位行高度压为 0，
@@ -605,6 +605,103 @@ window.__ModuleLoader__.load({
       return (value / (1024 * 1024 * 1024)).toFixed(2) + " GB";
     }
 
+    //#region 轻量 Markdown 渲染（发布说明用）
+    /** HTML 转义（渲染前必须经过，杜绝注入）。 */
+    function dduEscapeHtml(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    /** 行内 Markdown：行内代码 / 链接 / 加粗 / 斜体。 */
+    function dduRenderInline(text) {
+      let out = dduEscapeHtml(text);
+      out = out.replace(/`([^`]+)`/g, "<code>$1</code>");
+      out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (match, label, url) => {
+        const safe = /^https?:\/\//i.test(url) ? url : "";
+        return safe
+          ? '<a href="' + safe + '">' + label + "</a>"
+          : label;
+      });
+      out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      out = out.replace(
+        /(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?:;]|$)/g,
+        "$1<em>$2</em>",
+      );
+      return out;
+    }
+
+    /**
+     * 极简 Markdown → 安全 HTML（发布说明支持子集）：
+     * 标题 #~######、无序/有序列表、分隔线、段落、行内代码/链接/加粗/斜体。
+     */
+    function dduRenderMarkdown(source) {
+      const lines = String(source ?? "").split(/\r?\n/);
+      const blocks = [];
+      let paragraph = [];
+      const flushParagraph = () => {
+        if (paragraph.length > 0) {
+          blocks.push("<p>" + paragraph.join("<br>") + "</p>");
+          paragraph = [];
+        }
+      };
+      for (const raw of lines) {
+        const trimmed = raw.trim();
+        if (trimmed === "") {
+          flushParagraph();
+          continue;
+        }
+        if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+          flushParagraph();
+          blocks.push("<hr>");
+          continue;
+        }
+        const heading = trimmed.match(/^(#{1,6})\s+(.*)$/);
+        if (heading) {
+          flushParagraph();
+          const level = heading[1].length;
+          blocks.push(
+            "<h" + level + ">" + dduRenderInline(heading[2]) + "</h" + level + ">",
+          );
+          continue;
+        }
+        const item = trimmed.match(/^([-*+]|\d+[.)])\s+(.*)$/);
+        if (item) {
+          flushParagraph();
+          blocks.push("<li>" + dduRenderInline(item[2]) + "</li>");
+          continue;
+        }
+        paragraph.push(dduRenderInline(raw.trimEnd()));
+      }
+      flushParagraph();
+      let html = "";
+      let inList = false;
+      const closeList = () => {
+        if (inList) {
+          html += "</ul>";
+          inList = false;
+        }
+      };
+      for (const block of blocks) {
+        if (block.startsWith("<li>")) {
+          if (!inList) {
+            html += "<ul>";
+            inList = true;
+          }
+          html += block;
+        } else {
+          closeList();
+          html += block;
+        }
+      }
+      closeList();
+      return html;
+    }
+    //#endregion
+
     //#region 更新弹窗（原生 DOM 实现）
     /**
      * 更新弹窗（标准更新流程），纯原生 DOM 实现：
@@ -669,9 +766,9 @@ window.__ModuleLoader__.load({
       versionRowEl.appendChild(currentText);
       versionRowEl.appendChild(arrow);
       versionRowEl.appendChild(newText);
-      // 发布说明（限高滚动）。
+      // 发布说明（限高滚动，Markdown 渲染）。
       const notesText = latest?.body ? String(latest.body) : "";
-      notesEl.textContent = notesText;
+      notesEl.innerHTML = notesText === "" ? "" : dduRenderMarkdown(notesText);
       notesEl.style.display = notesText === "" ? "none" : "";
       bodyEl.replaceChildren();
       if (downloading) {
@@ -766,6 +863,21 @@ window.__ModuleLoader__.load({
       versionRowEl.className = "dduiU_dlgVersionRow";
       const notesEl = document.createElement("div");
       notesEl.className = "dduiU_dlgNotes";
+      // 发布说明里的链接交给系统浏览器打开。
+      notesEl.addEventListener("click", (event) => {
+        const anchor =
+          typeof event?.target?.closest === "function"
+            ? event.target.closest("a")
+            : null;
+        const href =
+          anchor !== null && anchor !== undefined
+            ? anchor.getAttribute("href")
+            : null;
+        if (typeof href === "string" && href !== "") {
+          event.preventDefault();
+          globalThis.window.open(href, "_blank");
+        }
+      });
       const bodyEl = document.createElement("div");
       bodyEl.className = "dduiU_dlgBody";
       const footerEl = document.createElement("div");
