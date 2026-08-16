@@ -716,11 +716,6 @@ function configureNavigation(window) {
   window.webContents.on('console-message', details => {
     const message = details?.message
     if (typeof message !== 'string') return
-    // 更新插件诊断标记：写入 backend.log 便于排查。
-    if (message.startsWith('__DSH_DESKTOP_UPDATE_DBG__:')) {
-      appendBackendOutput(`[upd-dbg] ${message.slice('__DSH_DESKTOP_UPDATE_DBG__:'.length)}\n`)
-      return
-    }
     if (message.startsWith(desktopWakeMarker)) {
       showMainWindow()
       return
@@ -838,29 +833,23 @@ async function createWindow() {
 }
 
 async function launch() {
-  appendBackendOutput('[launch] createWindow…\n')
   await createWindow()
-  appendBackendOutput('[launch] window created\n')
   await preparePackagedRuntime()
-  appendBackendOutput('[launch] runtime prepared\n')
   const context = prepareBackendContext()
   await setLoadingStatus('正在准备内置桌面插件…')
   await prepareBundledPlugins(context)
-  appendBackendOutput('[launch] plugins prepared\n')
   await setLoadingStatus('正在启动本地服务…')
   const port = await reservePort()
   backendOrigin = `http://${backendHost}:${port}`
   startBackend(port, context)
   await waitForBackend(`${backendOrigin}/`)
-  appendBackendOutput(`[launch] backend ready at ${backendOrigin}\n`)
   // loadURL 的 promise 在个别环境下可能不落定（页面已显示但 did-finish-load
   // 未触发），死等会卡住 launch() 之后的所有初始化（含自动更新）。
   // 加超时兜底：页面照常显示，初始化继续。
-  const loadResult = await Promise.race([
+  await Promise.race([
     mainWindow.loadURL(`${backendOrigin}/`),
-    new Promise((resolve) => setTimeout(() => resolve('timeout'), 60_000)),
+    new Promise((resolve) => setTimeout(resolve, 60_000)),
   ])
-  appendBackendOutput(`[launch] loadURL settled: ${loadResult === 'timeout' ? 'timeout(60s)' : 'ok'}\n`)
 }
 
 function stopBackend() {
@@ -906,7 +895,6 @@ function initAutoUpdater() {
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
   autoUpdater.on('update-available', (info) => {
-    appendBackendOutput(`Auto-update event: update-available ${String(info?.version)}\n`)
     recordAutoCheck()
     const version = typeof info?.version === 'string' ? info.version : ''
     if (version === '') return
@@ -915,10 +903,7 @@ function initAutoUpdater() {
     if (readDismissedVersion() === version) return
     dispatchUpdateEvent({ type: 'update-available', version })
   })
-  autoUpdater.on('update-not-available', () => {
-    appendBackendOutput('Auto-update event: update-not-available\n')
-    recordAutoCheck()
-  })
+  autoUpdater.on('update-not-available', () => recordAutoCheck())
   autoUpdater.on('download-progress', (progress) => {
     dispatchUpdateEvent({
       type: 'download-progress',
@@ -940,22 +925,8 @@ function initAutoUpdater() {
   })
   // GitHub 未认证 API 限流保护：成功检查后 1 小时内不再重复检查，
   // 避免每次启动都消耗配额（运营商 NAT 下多用户共享出口 IP）。
-  appendBackendOutput(
-    `Auto-update init: packaged=${app.isPackaged} portable=${Boolean(process.env.PORTABLE_EXECUTABLE_DIR)} shouldCheck=${shouldAutoCheck()}\n`,
-  )
   if (!shouldAutoCheck()) return
-  const checkPromise = autoUpdater.checkForUpdates()
-  checkPromise.then(
-    (result) => {
-      appendBackendOutput(
-        `Auto-update check resolved: ${result === null ? 'null' : 'ok'}\n`,
-      )
-    },
-    (error) => {
-      appendBackendOutput(`Auto-update check rejected: ${String(error)}\n`)
-    },
-  )
-  checkPromise.catch(() => {})
+  autoUpdater.checkForUpdates().catch(() => {})
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
