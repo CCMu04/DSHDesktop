@@ -34,7 +34,9 @@ jobs:
         with:
           name: DSH-Desktop-${{ github.run_id }}-x64
           path: |
-            dist/DSH-Desktop-Setup-*-x64[recommend].exe
+            # 注意：artifact 路径是 glob，[recommend] 的方括号会被解析为
+            # 字符类——用 -x64*.exe 覆盖（匹配 DSH-Desktop-Setup-*-x64[recommend].exe）。
+            dist/DSH-Desktop-Setup-*-x64*.exe
             dist/DSH-Desktop-Portable-*-x64.exe
           if-no-files-found: error
 
