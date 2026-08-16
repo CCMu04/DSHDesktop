@@ -264,12 +264,32 @@ export function apply(ctx, config = {}) {
           json(res, 405, { ok: false, error: "method-not-allowed" });
           return;
         }
+        // dismissedVersion 由主进程写入（$DSH_HOME/desktop-update-prompt.json），
+        // host 代为读取：客户端据此决定是否自动弹窗（不依赖 electron-updater
+        // 的慢速检查）。
+        let dismissedVersion = null;
+        try {
+          const raw = JSON.parse(
+            readFileSync(
+              join(updatesHomeDir(), "desktop-update-prompt.json"),
+              "utf8",
+            ),
+          );
+          if (
+            typeof raw === "object" &&
+            raw !== null &&
+            typeof raw.dismissedVersion === "string"
+          ) {
+            dismissedVersion = raw.dismissedVersion;
+          }
+        } catch {}
         const body = JSON.stringify({
           ...readVersionInfo(),
           platform: process.platform,
           arch: process.arch,
           os: windowsDisplayName(),
           installKind: installKind(),
+          dismissedVersion,
         });
         res.writeHead(200, {
           "content-type": "application/json; charset=utf-8",

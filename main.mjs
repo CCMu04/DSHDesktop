@@ -722,9 +722,21 @@ function configureNavigation(window) {
     }
     if (message.startsWith(desktopUpdateMarker)) {
       const command = message.slice(desktopUpdateMarker.length).trim()
-      if (command === 'start' && pendingUpdateVersion !== null) {
+      if (command === 'start') {
         // 用户点了「立即更新」：开始后台下载（进度经事件推回页面）。
-        autoUpdater.downloadUpdate().catch(() => {})
+        // 启动检查可能被节流跳过或仍在进行：按需补一次检查再下载。
+        const downloadWhenReady = () => {
+          if (pendingUpdateVersion === null) return Promise.resolve()
+          return autoUpdater.downloadUpdate().catch(() => {})
+        }
+        if (pendingUpdateVersion !== null) {
+          void downloadWhenReady()
+        } else {
+          void autoUpdater
+            .checkForUpdates()
+            .then(downloadWhenReady)
+            .catch(() => {})
+        }
       } else if (command === 'dismiss' && pendingUpdateVersion !== null) {
         // 用户勾选「下次不再自动提醒」：记录版本，之后不再自动弹窗。
         recordDismissedVersion(pendingUpdateVersion)

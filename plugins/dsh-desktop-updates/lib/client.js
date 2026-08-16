@@ -228,6 +228,22 @@ window.__ModuleLoader__.load({
       const knownTag = getUpdateState().tag;
       if (newer) {
         setUpdateState({ available: true, tag: latest.tag_name, latest });
+        // 安装版自动弹窗（不依赖 electron-updater 的慢速检查）：
+        // 有更新、未「不再提醒」、且当前没有弹窗/下载流程时弹出。
+        const dismissed =
+          info !== null && typeof info?.dismissedVersion === "string"
+            ? info.dismissedVersion
+            : null;
+        const state = getUpdateState();
+        if (
+          dduInstallKind === "installer" &&
+          dismissed !== latest.tag_name &&
+          state.phase !== "downloading" &&
+          state.phase !== "downloaded" &&
+          state.dialogOpen === false
+        ) {
+          setUpdateState({ phase: "available", dialogOpen: true });
+        }
       } else if (
         latest !== null &&
         typeof latest === "object" &&
