@@ -17,6 +17,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, Menu, nativeImage, nativeTheme, net as electronNet, Notification, screen, shell, Tray } from 'electron'
+import electronUpdater from 'electron-updater'
 import { ensureBundledPlugin } from './builtin-plugin.mjs'
 import { prepareDesktopToolchain } from './toolchain.mjs'
 import {
@@ -39,6 +40,8 @@ import {
   serializeWindowState,
   WINDOW_STATE_FILE,
 } from './window-state.mjs'
+
+const { autoUpdater } = electronUpdater
 
 const shellDirectory = path.dirname(fileURLToPath(import.meta.url))
 const runtimePreloadPath = app.isPackaged
@@ -793,6 +796,35 @@ function stopBackend() {
   }
 }
 
+function initAutoUpdater() {
+  // 仅打包版本启用自动更新（开发模式无发布通道）。
+  if (!app.isPackaged) return
+  // 便携版无法静默替换运行中的 exe：跳过自动更新，改用设置里的手动「检查更新」。
+  if (process.env.PORTABLE_EXECUTABLE_DIR) return
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.on('update-downloaded', (info) => {
+    void dialog
+      .showMessageBox({
+        type: 'info',
+        title: '更新已就绪',
+        message: `新版本 ${info.version} 已下载完成`,
+        detail: '应用将在退出时自动安装更新。',
+        buttons: ['立即重启并安装', '稍后'],
+        defaultId: 0,
+        cancelId: 1,
+      })
+      .then(({ response }) => {
+        if (response === 0) autoUpdater.quitAndInstall()
+      })
+  })
+  autoUpdater.on('error', (error) => {
+    // 静默记录：自动更新失败不影响正常使用，可到 设置 → 检查更新 手动检查。
+    appendBackendOutput(`Auto-update error: ${String(error)}\n`)
+  })
+  autoUpdater.checkForUpdates().catch(() => {})
+}
+
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) app.quit()
 
@@ -805,6 +837,7 @@ app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
   try {
     await launch()
+    initAutoUpdater()
   } catch (error) {
     const details = recentBackendOutput.trim()
     await dialog.showMessageBox({
