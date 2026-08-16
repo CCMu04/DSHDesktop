@@ -955,10 +955,26 @@ window.__ModuleLoader__.load({
               }
               const container = document.createElement("div");
               document.body.appendChild(container);
+              // 原生点击诊断（绕过 React 委托）：点击是否到达页面 DOM。
+              const clickProbe = (event) => {
+                const el = event?.target;
+                dduDbg(
+                  "native click: " +
+                    (el && el.tagName ? el.tagName : String(el)) +
+                    " cls=" +
+                    (el && el.className && typeof el.className === "string"
+                      ? el.className.slice(0, 80)
+                      : ""),
+                );
+              };
+              container.addEventListener("click", clickProbe, true);
               const root = createRootFn(container);
               root.render((0, react_jsx_runtime.jsx)(UpdateDialogHost, { t }));
               dduDbg("dialog host: mounted");
               return () => {
+                try {
+                  container.removeEventListener("click", clickProbe, true);
+                } catch {}
                 try {
                   root.unmount();
                 } catch {}
