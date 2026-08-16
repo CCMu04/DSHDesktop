@@ -67,9 +67,13 @@ jobs:
         shell: pwsh
         run: |
           $tag = if ($env:RELEASE_TAG) { $env:RELEASE_TAG } else { $env:GITHUB_REF_NAME }
+          # gh release create 会对上传路径做 glob 展开，[recommend] 的方括号
+          # 会被当作字符类而匹配不到字面文件名（"no matches found"）——
+          # 转义为 \[ \] 让 glob 匹配字面方括号。
           $assets = Get-ChildItem -LiteralPath dist -File |
             Where-Object Name -Match '^DSH-Desktop-(Setup-.+-x64\[recommend\]|Portable-.+-x64)\.exe$' |
-            Select-Object -ExpandProperty FullName
+            Select-Object -ExpandProperty FullName |
+            ForEach-Object { $_.Replace('[', '\[').Replace(']', '\]') }
           gh release create $tag @assets `
             --repo $env:GITHUB_REPOSITORY `
             --title "DSH Desktop $tag" `
