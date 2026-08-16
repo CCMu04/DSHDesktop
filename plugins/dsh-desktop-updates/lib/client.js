@@ -129,26 +129,44 @@ window.__ModuleLoader__.load({
     /** 本机安装方式（installer | portable | dev），由 version 接口注入。 */
     let dduInstallKind = null;
     let dduUpdateListeners = new Set();
-    /** 有更新时给 body 加标记：侧栏设置按钮让出右侧空间给「更新」按钮。 */
+    /** 有更新时给 body 加标记，并强制压缩设置按钮宽度（内联样式，必定生效）。 */
     function syncUpdateBodyClass() {
       try {
         if (typeof document === "undefined") return;
-        document.body.classList.toggle(
-          "ddu-update-available",
-          getUpdateState().available,
-        );
-        // 诊断：确认标记与设置区 padding 是否真正生效。
+        const available = getUpdateState().available;
+        document.body.classList.toggle("ddu-update-available", available);
         const area = document.querySelector('[class$="_settingsArea"]');
+        const trigger =
+          area !== null ? area.querySelector('[class$="_trigger"]') : null;
+        if (trigger !== null) {
+          // 内联宽度覆盖官方 calc(100% + 8px)：让出右侧空间给「更新」按钮，
+          // 设置按钮的 hover 高亮随之收窄。
+          trigger.style.width = available ? "calc(100% - 48px)" : "";
+        }
         dduDbg(
-          "syncBody: bodyClass=" +
-            document.body.className.slice(0, 60) +
-            " areaFound=" +
-            (area !== null) +
+          "syncBody: avail=" +
+            available +
+            " areaW=" +
             (area !== null
-              ? " pad=" + getComputedStyle(area).paddingRight
-              : ""),
+              ? Math.round(area.getBoundingClientRect().width)
+              : -1) +
+            " triggerW=" +
+            (trigger !== null
+              ? Math.round(trigger.getBoundingClientRect().width)
+              : -1),
         );
       } catch {}
+    }
+    /** 侧栏可能晚于插件状态变化挂载：available 翻转后重试几次应用宽度。 */
+    function syncUpdateBodyClassWithRetry() {
+      syncUpdateBodyClass();
+      if (!getUpdateState().available) return;
+      let attempts = 0;
+      const timer = setInterval(() => {
+        attempts += 1;
+        syncUpdateBodyClass();
+        if (attempts >= 5) clearInterval(timer);
+      }, 800);
     }
     function setUpdateState(patch) {
       Object.assign(dduUpdateState, patch);
@@ -156,7 +174,7 @@ window.__ModuleLoader__.load({
       // bail-out 不重渲染（此前的原地变更导致弹窗宿主永不刷新）。
       const snapshot = { ...dduUpdateState };
       for (const fn of dduUpdateListeners) fn(snapshot);
-      syncUpdateBodyClass();
+      syncUpdateBodyClassWithRetry();
     }
     function getUpdateState() {
       return dduUpdateState;
