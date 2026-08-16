@@ -274,6 +274,11 @@ async function preparePackagedRuntime() {
 
 function appendBackendOutput(chunk) {
   recentBackendOutput = `${recentBackendOutput}${chunk}`.slice(-8_000)
+  // 主进程自身的诊断也写入日志文件（此前仅内存缓冲，日志里看不到
+  // 自动更新等主进程输出，排查困难）。
+  try {
+    logStream?.write(chunk)
+  } catch {}
 }
 
 function reservePort() {
