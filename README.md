@@ -125,4 +125,6 @@ npm run dist:offline
 
 内置工作台（右侧分栏、文件预览、Git 面板等功能集）参考了 [DSH-better-sidebar](https://github.com/omdsh-dev/DSH-better-sidebar)（社区侧边栏工作台），在此向该项目的作者与贡献者致谢。实现按本仓库的插件规范从零编写，未复制其代码；功能边界（如 Git 面板不做 push / fetch、Office 不做内嵌预览）与其保持一致。
 
+自动更新功能（electron-updater 集成与更新元数据发布）由 [Can-can2026](https://github.com/Can-can2026) 贡献（[PR #5](https://github.com/CCMu04/DSHDesktop/pull/5)），在此致谢。
+
 本项目自身代码使用 [MIT License](LICENSE)。
