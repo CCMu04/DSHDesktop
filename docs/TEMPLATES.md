@@ -4,6 +4,11 @@
 
 所有文档一律使用简体中文，不使用截图或图片。
 
+模板索引：
+
+- [PLUGIN-README-TEMPLATE.md](PLUGIN-README-TEMPLATE.md)：`plugins/dsh-desktop-*/README.md` 插件 README 模板
+- 本文档：README.md（项目级）、CHANGELOG.md、RELEASE_NOTES.md、THIRD_PARTY_NOTICES.md 模板
+
 ## README.md 模板
 
 ````markdown

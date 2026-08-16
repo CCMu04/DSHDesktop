@@ -115,8 +115,9 @@ npm run dist:offline
 
 ## 相关文档
 
-- [docs/PLUGINS.md](docs/PLUGINS.md)：内置插件规范与工作流（目录结构、宿主端 / 客户端契约、部署与生命周期、测试与发布）
-- [docs/TEMPLATES.md](docs/TEMPLATES.md)：文档格式模板
+- [plugins/PLUGIN_STANDARDS.md](plugins/PLUGIN_STANDARDS.md)：内置插件开发规范与工作流（插件体系、宿主端 / 客户端契约、集成优先级、部署与生命周期、测试与发布）
+- [docs/PLUGIN-README-TEMPLATE.md](docs/PLUGIN-README-TEMPLATE.md)：插件 README 固定格式模板
+- [docs/TEMPLATES.md](docs/TEMPLATES.md)：项目文档格式模板
 - [CHANGELOG.md](CHANGELOG.md)：全部版本变更记录
 
 ## 声明
