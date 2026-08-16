@@ -350,6 +350,50 @@ window.__ModuleLoader__.load({
       },
     };
 
+    /**
+     * 目录树展开状态 + 目录内容缓存（模块级 store）。
+     * 页签切换（文件 ↔ Git）时 FilesPanel 组件卸载重挂，组件本地 state
+     * 会全部丢失（目录树被收起）；提到模块级可跨挂载保留。会话 / cwd
+     * 变化时由 installFiles 的订阅清空（不同项目目录不串扰）。
+     */
+    const treeStore = {
+      expanded: {}, // path -> true
+      entries: {}, // path -> entries[]
+      listeners: new Set(),
+      notify() {
+        const snapshot = this.getSnapshot();
+        for (const listener of Array.from(this.listeners)) {
+          try {
+            listener(snapshot);
+          } catch {
+            // A failing listener must not break the store.
+          }
+        }
+      },
+      setExpanded(path, value) {
+        if (this.expanded[path] === value) return;
+        this.expanded = { ...this.expanded, [path]: value };
+        this.notify();
+      },
+      setEntries(dirPath, entries) {
+        if (this.entries[dirPath] === entries) return;
+        this.entries = { ...this.entries, [dirPath]: entries };
+        this.notify();
+      },
+      clear() {
+        this.expanded = {};
+        this.entries = {};
+        this.notify();
+      },
+      getSnapshot() {
+        return { expanded: this.expanded, entries: this.entries };
+      },
+      subscribe(listener) {
+        this.listeners.add(listener);
+        return () => this.listeners.delete(listener);
+      },
+    };
+
     /** 拼接带会话与路径参数的接口 URL。 */
     function ddffUrl(base, path) {
       const params = new URLSearchParams();
@@ -841,8 +885,11 @@ window.__ModuleLoader__.load({
       const [filesSnap, setFilesSnap] = react.useState(() =>
         filesStore.getSnapshot(),
       );
-      const [entries, setEntries] = react.useState({}); // path -> entries[]
-      const [expanded, setExpanded] = react.useState({}); // path -> true
+      // 目录树状态（展开 + 内容缓存）走模块级 treeStore：页签切换
+      // （文件 ↔ Git）时组件卸载重挂，本地 state 会丢（目录树收起）。
+      const [treeSnap, setTreeSnap] = react.useState(() =>
+        treeStore.getSnapshot(),
+      );
       const [loading, setLoading] = react.useState(null); // 正在加载的目录
       const [fatal, setFatal] = react.useState(null);
       // 资源管理器显示失败反馈（短暂显示后自动消失）+ 防连点。
@@ -901,31 +948,43 @@ window.__ModuleLoader__.load({
         [],
       );
 
-      // 会话 / cwd 变化 → 重置树与文件页签，并自动加载根目录内容
-      // （根目录行不显示，直接从 cwd 的内容开始展示）。
+      // loadDir 经 ref 转发：订阅回调（挂载时注册）始终调用最新实现，
+      // 且用 ref 做并发守卫（闭包捕获的 state 会陈旧）。
+      const loadingRef = react.useRef(null);
+      const loadDirRef = react.useRef(() => {});
+      // 会话 / cwd 变化 → 重置文件页签并自动加载根目录内容
+      // （根目录行不显示，直接从 cwd 的内容开始展示）。目录树的
+      // 展开/内容清理由模块级订阅负责（组件卸载时也生效）。
       react.useEffect(() => {
         const offSession = ddffStore.subscribe((next) => {
           setSessionSnap(next);
-          setEntries({});
-          setExpanded({});
           setFatal(null);
-          if (next.cwd !== null) loadDir(next.cwd);
+          if (next.cwd !== null) loadDirRef.current(next.cwd);
         });
         const offFiles = filesStore.subscribe(setFilesSnap);
+        const offTree = treeStore.subscribe(setTreeSnap);
         // 挂载即加载：工作台关闭再打开时组件重新挂载，但 store 没有
         // 新事件、订阅不会触发，需按当前快照立即加载根目录，
-        // 否则目录树空白（要手动点刷新才出现）。
+        // 否则目录树空白（要手动点刷新才出现）；treeStore 已有该目录
+        // 缓存（页签切换回来）则直接显示，不重复加载。
         const initial = ddffStore.getSnapshot();
-        if (initial.cwd !== null) loadDir(initial.cwd);
+        if (
+          initial.cwd !== null &&
+          treeStore.getSnapshot().entries[initial.cwd] === undefined
+        ) {
+          loadDirRef.current(initial.cwd);
+        }
         return () => {
           offSession();
           offFiles();
+          offTree();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, []);
 
       const loadDir = (dirPath) => {
-        if (loading !== null) return;
+        if (loadingRef.current !== null) return;
+        loadingRef.current = dirPath;
         setLoading(dirPath);
         fetch(ddffUrl(TREE_URL, dirPath), { cache: "no-store" })
           .then((res) =>
@@ -934,24 +993,27 @@ window.__ModuleLoader__.load({
               : Promise.reject(new Error("http-" + res.status)),
           )
           .then((body) => {
-            setEntries((prev) => ({
-              ...prev,
-              [dirPath]: Array.isArray(body?.entries) ? body.entries : [],
-            }));
+            treeStore.setEntries(
+              dirPath,
+              Array.isArray(body?.entries) ? body.entries : [],
+            );
+            loadingRef.current = null;
             setLoading(null);
           })
           .catch(() => {
+            loadingRef.current = null;
             setLoading(null);
             setFatal(t("panel.loadFailed"));
           });
       };
+      loadDirRef.current = loadDir;
 
       const toggleDir = (dirPath) => {
-        if (expanded[dirPath] !== true) {
-          setExpanded((prev) => ({ ...prev, [dirPath]: true }));
-          if (entries[dirPath] === undefined) loadDir(dirPath);
+        if (treeSnap.expanded[dirPath] !== true) {
+          treeStore.setExpanded(dirPath, true);
+          if (treeSnap.entries[dirPath] === undefined) loadDir(dirPath);
         } else {
-          setExpanded((prev) => ({ ...prev, [dirPath]: false }));
+          treeStore.setExpanded(dirPath, false);
         }
       };
 
@@ -1042,9 +1104,9 @@ window.__ModuleLoader__.load({
       const activeViewer =
         activeFile !== null ? viewerById(activeFile.viewerId) : null;
 
-      // 递归渲染目录行（依赖组件内 entries/expanded/loading 状态）。
+      // 递归渲染目录行（依赖 treeStore 的 entries/expanded + loading 状态）。
       const renderChildren = (dirPath, depth) => {
-        const list = entries[dirPath];
+        const list = treeSnap.entries[dirPath];
         if (list === undefined) return null;
         return list.map((entry) => {
           const entryPath = ddffJoin(dirPath, entry.name);
@@ -1067,7 +1129,7 @@ window.__ModuleLoader__.load({
                 ? jsx("span", {
                     className: "ddff_dirIcon",
                     children: jsx(
-                      expanded[entryPath] === true
+                      treeSnap.expanded[entryPath] === true
                         ? FolderOpenIcon
                         : FolderIcon,
                       { size: 14 },
@@ -1098,7 +1160,7 @@ window.__ModuleLoader__.load({
             key: entryPath,
             children: [
               row,
-              expanded[entryPath] === true
+              treeSnap.expanded[entryPath] === true
                 ? renderChildren(entryPath, depth + 1)
                 : null,
             ],
@@ -1282,8 +1344,7 @@ window.__ModuleLoader__.load({
                     title: t("panel.refresh"),
                     "aria-label": t("panel.refresh"),
                     onClick: () => {
-                      setEntries({});
-                      setExpanded({});
+                      treeStore.clear();
                       setFatal(null);
                       loadDir(cwd);
                     },
@@ -1571,6 +1632,14 @@ window.__ModuleLoader__.load({
         disposers.push(() => {
           if (typeof listOff === "function") listOff();
         });
+
+        // 目录树状态跟随会话（模块级订阅：组件卸载时也生效）：cwd 变化
+        // 时清空展开/内容缓存（不同项目目录不串扰；ddffStore.update 的
+        // 幂等保护保证同 cwd 的通知不会误清）。
+        const treeSessionOff = ddffStore.subscribe(() => {
+          treeStore.clear();
+        });
+        disposers.push(treeSessionOff);
 
         // FilesPanel 由 workbench 渲染时会收到 workbench 词典的 t，
         // 这里用 files 自己的 t 覆盖，保证面板文案来自 desktop-files 词典。
