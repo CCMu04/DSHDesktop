@@ -56,10 +56,14 @@ jobs:
           pattern: DSH-Desktop-${{ github.run_id }}-*
           path: dist
           merge-multiple: true
+      - name: Inspect downloaded assets
+        shell: pwsh
+        run: |
+          Get-ChildItem -LiteralPath dist -Recurse -File | Select-Object FullName
       - name: Verify preview assets
         shell: pwsh
         run: |
-          $assets = Get-ChildItem -LiteralPath dist/release-assets -File |
+          $assets = Get-ChildItem -LiteralPath dist -Recurse -File |
             Where-Object Name -Match '^DSH-Desktop-(Setup-.+-x64\[recommend\]|Portable-.+-x64)\.exe$'
           if ($assets.Count -ne 2) {
             throw "Expected two release assets, found $($assets.Count)."
@@ -72,10 +76,10 @@ jobs:
         shell: pwsh
         run: |
           $tag = if ($env:RELEASE_TAG) { $env:RELEASE_TAG } else { $env:GITHUB_REF_NAME }
-          # 用 *.exe glob 由 gh 展开（不含方括号元字符，展开结果可含
-          # [recommend] 字面文件名）；GitHub 端会把 asset 名里的 [ ] 等
-          # 非 [A-Za-z0-9._-] 字符替换为 .（如 x64.recommend.exe）。
-          gh release create $tag "dist/release-assets/*.exe" `
+          # 用 gh 的 ** glob 递归匹配 dist 下的安装包（不含方括号元字符，
+          # 展开结果可含 [recommend] 字面文件名）；GitHub 端会把 asset 名里
+          # 的 [ ] 等非 [A-Za-z0-9._-] 字符替换为 .（如 x64.recommend.exe）。
+          gh release create $tag "dist/**/*.exe" `
             --repo $env:GITHUB_REPOSITORY `
             --title "DSH Desktop $tag" `
             --notes-file RELEASE_NOTES.md `
