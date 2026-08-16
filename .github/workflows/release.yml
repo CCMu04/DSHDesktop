@@ -72,9 +72,10 @@ jobs:
         shell: pwsh
         run: |
           $tag = if ($env:RELEASE_TAG) { $env:RELEASE_TAG } else { $env:GITHUB_REF_NAME }
-          # 传目录（gh 遍历上传，文件名任意），避免 setup 文件名里的
-          # [recommend] 触发 gh 的 glob 字符类解析。
-          gh release create $tag dist/release-assets `
+          # 用 *.exe glob 由 gh 展开（不含方括号元字符，展开结果可含
+          # [recommend] 字面文件名）；GitHub 端会把 asset 名里的 [ ] 等
+          # 非 [A-Za-z0-9._-] 字符替换为 .（如 x64.recommend.exe）。
+          gh release create $tag "dist/release-assets/*.exe" `
             --repo $env:GITHUB_REPOSITORY `
             --title "DSH Desktop $tag" `
             --notes-file RELEASE_NOTES.md `
