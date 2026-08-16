@@ -71,9 +71,17 @@ window.__ModuleLoader__.load({
     };
     // 「检查更新」分区面板样式。
     const updatesCss =
-      ".dduiU_section{width:100%;max-width:760px;color:var(--dsw-alias-label-primary);flex-direction:column;gap:16px;display:flex}.dduiU_block{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;flex-direction:column;gap:12px;padding:14px 16px;display:flex}.dduiU_row{align-items:center;justify-content:space-between;gap:12px;display:flex}.dduiU_rowLabel{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}.dduiU_rowValue{color:var(--dsw-alias-label-primary);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.5}.dduiU_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}";
+      ".dduiU_section{width:100%;max-width:760px;color:var(--dsw-alias-label-primary);flex-direction:column;gap:16px;display:flex}.dduiU_block{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;flex-direction:column;gap:12px;padding:14px 16px;display:flex}.dduiU_row{align-items:center;justify-content:space-between;gap:12px;display:flex}.dduiU_rowLabel{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}.dduiU_rowValue{color:var(--dsw-alias-label-primary);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.5}.dduiU_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}.dduiU_dlBlock{flex-direction:column;gap:6px;display:flex}.dduiU_progress{height:6px;background:var(--dsw-alias-bg-layer-2);border-radius:3px;overflow:hidden}.dduiU_progressBar{height:100%;background:var(--dsw-alias-state-info-primary,#3b82f6);border-radius:3px;transition:width .15s ease-out}.dduiU_progressText{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5}.dduiU_remindRow{align-items:center;gap:8px;margin-top:8px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.5;cursor:pointer;display:flex}.dduiU_remindRow input{accent-color:var(--dsw-alias-state-info-primary,#3b82f6);width:14px;height:14px;margin:0;cursor:pointer}";
     const updatesTagId = "dsh-desktop-updates/UpdatesSection.module.css";
     const installUpdatesCss = () => dduInstallCss(updatesCss, updatesTagId);
+    // 侧边栏底部「更新」按钮样式 + 与设置按钮同排的布局覆盖。
+    // 官方 footer 区默认纵向排布（footerActions 在 settingsArea 上方、各占满整行），
+    // 展开态改为横向同排：设置按钮 flex:1 让出空间，更新按钮固定宽度；
+    // 收起态（root 带 collapsed 类）保持官方原布局，更新按钮本身也不渲染。
+    const sidebarCss =
+      ".dduiU_sideBtn{height:32px;padding:0 12px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-button-elevated-fill);color:var(--dsw-alias-label-primary);font-size:13px;line-height:1;white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}.dduiU_sideBtn:hover{background:var(--dsw-alias-button-floating-hover)}[class$=\"_root\"]:not([class*=\"_collapsed\"]) [class$=\"_footArea\"]{flex-direction:row;align-items:center;gap:8px}[class$=\"_root\"]:not([class*=\"_collapsed\"]) [class$=\"_settingsArea\"]{flex:1;min-width:0}[class$=\"_root\"]:not([class*=\"_collapsed\"]) [class$=\"_footerActions\"]{flex:none}";
+    const sidebarTagId = "dsh-desktop-updates/SidebarUpdateAction.module.css";
+    const installSidebarCss = () => dduInstallCss(sidebarCss, sidebarTagId);
     //#endregion
 
     //#region 版本比较
@@ -105,7 +113,163 @@ window.__ModuleLoader__.load({
     }
     //#endregion
 
+    //#region 更新状态
+    /** 更新流程状态机：available → downloading → downloaded（安装版由主进程事件驱动）。 */
+    const dduUpdateState = {
+      available: false, // 存在新版本（决定侧栏「更新」按钮显隐）
+      tag: null, // 新版本号（如 "v0.1.0-rc.6.6.4"）
+      latest: null, // 最新版本信息（GitHub Release 精简字段）
+      phase: "idle", // idle | available | downloading | downloaded
+      percent: 0,
+      transferred: 0,
+      total: 0,
+      dialogOpen: false,
+    };
+    /** 本机安装方式（installer | portable | dev），由 version 接口注入。 */
+    let dduInstallKind = null;
+    let dduUpdateListeners = new Set();
+    function setUpdateState(patch) {
+      Object.assign(dduUpdateState, patch);
+      for (const fn of dduUpdateListeners) fn(dduUpdateState);
+    }
+    function getUpdateState() {
+      return dduUpdateState;
+    }
+    function subscribeUpdateState(fn) {
+      dduUpdateListeners.add(fn);
+      return () => {
+        dduUpdateListeners.delete(fn);
+      };
+    }
+    /** React 订阅更新状态。 */
+    function useUpdateState() {
+      const [state, setState] = react.useState(getUpdateState());
+      react.useEffect(() => subscribeUpdateState(setState), []);
+      return state;
+    }
+
+    /** 打开更新弹窗。 */
+    function openUpdateDialog() {
+      setUpdateState({ dialogOpen: true });
+    }
+    function closeUpdateDialog() {
+      setUpdateState({ dialogOpen: false });
+    }
+    /** 立即更新：安装版通知主进程开始下载；便携版直接打开下载页。 */
+    function startUpdateDownload() {
+      const state = getUpdateState();
+      if (dduInstallKind === "installer") {
+        setUpdateState({
+          phase: "downloading",
+          percent: 0,
+          transferred: 0,
+          total: 0,
+        });
+        console.log(desktopUpdateMarker + "start");
+        return;
+      }
+      const latest = state.latest;
+      const asset = pickAsset(latest?.assets, dduInstallKind ?? null);
+      const url =
+        (typeof asset?.browser_download_url === "string"
+          ? asset.browser_download_url
+          : null) ??
+        (typeof latest?.html_url === "string"
+          ? latest.html_url
+          : "https://github.com/CCMu04/DSHDesktop/releases");
+      closeUpdateDialog();
+      globalThis.window.open(url, "_blank");
+    }
+    /** 勾选「下次不再自动提醒」：通知主进程记录版本，之后不再自动弹窗。 */
+    function dismissUpdateReminder() {
+      console.log(desktopUpdateMarker + "dismiss");
+    }
+    /** 立即重启并安装（更新已下载完成后）。 */
+    function quitAndInstallUpdate() {
+      console.log(desktopUpdateMarker + "quit-install");
+    }
+
+    /**
+     * 刷新「是否有新版本」状态（决定侧栏按钮显隐）并补齐版本信息。
+     * 走本地缓存与 host 接口，不额外消耗 GitHub API 配额。
+     */
+    async function refreshUpdateState() {
+      let info = null;
+      let latest = null;
+      try {
+        const infoRes = await fetch("/api/desktop-updates/version", {
+          headers: { accept: "application/json" },
+          cache: "no-store",
+        });
+        info = infoRes.ok ? await infoRes.json() : null;
+      } catch {}
+      try {
+        latest = await fetchLatestRelease();
+      } catch {}
+      if (
+        info !== null &&
+        typeof info === "object" &&
+        (info.installKind === "installer" ||
+          info.installKind === "portable" ||
+          info.installKind === "dev")
+      ) {
+        dduInstallKind = info.installKind;
+      }
+      const currentVersion =
+        info !== null && typeof info?.currentVersion === "string"
+          ? info.currentVersion
+          : null;
+      const newer =
+        latest !== null &&
+        typeof latest === "object" &&
+        typeof latest?.tag_name === "string" &&
+        currentVersion !== null &&
+        compareVersions(latest.tag_name, currentVersion) > 0;
+      if (newer) {
+        setUpdateState({ available: true, tag: latest.tag_name, latest });
+      } else if (
+        latest !== null &&
+        typeof latest === "object" &&
+        typeof latest?.tag_name === "string"
+      ) {
+        // 查询成功但无新版本：清除按钮状态。
+        setUpdateState({ available: false, tag: null, latest: null });
+      }
+      // 查询失败（latest 为 { error } 或 null）：保留现有状态，
+      // 不影响已打开的弹窗与侧栏按钮（等下次成功刷新再更新）。
+      return { info, latest };
+    }
+
+    /** 主进程 → 页面事件（electron-updater 状态变更）。 */
+    function onUpdateEvent(event) {
+      const detail = event?.detail;
+      if (detail === null || typeof detail !== "object") return;
+      if (detail.type === "update-available") {
+        setUpdateState({
+          available: true,
+          tag: typeof detail.version === "string" ? detail.version : null,
+          phase: "available",
+          dialogOpen: true,
+        });
+        // 补齐 release 详情（走缓存；无缓存时失败也不影响弹窗）。
+        void refreshUpdateState();
+      } else if (detail.type === "download-progress") {
+        setUpdateState({
+          phase: "downloading",
+          percent: typeof detail.percent === "number" ? detail.percent : 0,
+          transferred:
+            typeof detail.transferred === "number" ? detail.transferred : 0,
+          total: typeof detail.total === "number" ? detail.total : 0,
+        });
+      } else if (detail.type === "update-downloaded") {
+        setUpdateState({ phase: "downloaded", dialogOpen: true });
+      }
+    }
+    //#endregion
+
     //#region 自动检查辅助
+    /** 渲染进程 → 主进程的自动更新命令标记（与主题标记同通道）。 */
+    const desktopUpdateMarker = "__DSH_DESKTOP_UPDATE__:";
     /** GitHub Releases API（未认证，60 次/小时/IP；配合本地缓存降低占用）。 */
     const LATEST_RELEASE_URL =
       "https://api.github.com/repos/CCMu04/DSHDesktop/releases/latest";
@@ -227,7 +391,6 @@ window.__ModuleLoader__.load({
       const [info, setInfo] = react.useState(null); // 本机客户端信息
       const [infoFailed, setInfoFailed] = react.useState(false);
       const [checking, setChecking] = react.useState(false);
-      const [dialog, setDialog] = react.useState(null); // 有更新时的弹窗数据
       // 挂载即读取本机客户端信息（版本、系统、安装方式），无需等待检查。
       react.useEffect(() => {
         let current = true;
@@ -287,33 +450,16 @@ window.__ModuleLoader__.load({
             currentVersion !== null &&
             compareVersions(latest.tag_name, currentVersion) > 0;
           if (newer) {
-            const asset = pickAsset(latest.assets, info?.installKind ?? null);
-            setDialog({
+            setUpdateState({
+              available: true,
               tag: latest.tag_name,
-              url:
-                (typeof asset?.browser_download_url === "string"
-                  ? asset.browser_download_url
-                  : null) ??
-                (typeof latest.html_url === "string"
-                  ? latest.html_url
-                  : "https://github.com/CCMu04/DSHDesktop/releases"),
-              publishedAt:
-                typeof latest.published_at === "string"
-                  ? latest.published_at
-                  : "",
-              body: typeof latest.body === "string" ? latest.body : "",
+              latest,
+              dialogOpen: true,
             });
           } else {
             showToast("success", t("updates.upToDate"));
           }
         });
-      };
-      const goDownload = () => {
-        const data = dialog;
-        if (data === null) return;
-        setDialog(null);
-        // Electron 窗口打开处理器会把外部链接交给系统浏览器。
-        globalThis.window.open(data.url, "_blank");
       };
       const infoRows = [
         {
@@ -387,52 +533,197 @@ window.__ModuleLoader__.load({
               ),
             ],
           }),
-          (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Modal, {
-            open: dialog !== null,
-            onClose: () => {
-              setDialog(null);
-            },
-            title:
-              dialog === null
-                ? t("updates.updateAvailable")
-                : t("updates.updateAvailable") + " " + dialog.tag,
-            description:
-              dialog === null
-                ? ""
-                : [
-                    dialog.publishedAt === ""
-                      ? ""
-                      : t("updates.releasedAt") +
-                        " " +
-                        dialog.publishedAt.slice(0, 10),
-                    dialog.body === "" ? "" : t("updates.releaseNotes"),
-                  ]
-                    .filter(Boolean)
-                    .join(" · "),
-            closeLabel: t("updates.notNow"),
-            footer: (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
+        ],
+      });
+    }
+    //#endregion
+
+    //#region 更新弹窗与侧栏按钮
+    /** 字节数人类可读格式化。 */
+    function formatBytes(value) {
+      if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+        return "—";
+      }
+      if (value < 1024) return value + " B";
+      if (value < 1024 * 1024) return (value / 1024).toFixed(0) + " KB";
+      if (value < 1024 * 1024 * 1024) {
+        return (value / (1024 * 1024)).toFixed(1) + " MB";
+      }
+      return (value / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+    }
+
+    /**
+     * 更新弹窗（标准更新流程）：
+     *   - 发现新版本：立即更新 / 稍后 + 「下次不再自动提醒」勾选（安装版）；
+     *   - 下载中：进度条 + 已下载/总大小；
+     *   - 已下载：立即重启安装 / 稍后（退出时自动安装）。
+     * 便携版无 electron-updater：动作退化为「前往下载」（浏览器打开安装包直链）。
+     * 弹窗挂在侧栏 footer 组件下（Modal 为 fixed 遮罩，任何页面都可见）。
+     */
+    function UpdateDialog({ t }) {
+      const state = useUpdateState();
+      const [remindOff, setRemindOff] = react.useState(false);
+      if (state.dialogOpen === false) return null;
+      const latest = state.latest;
+      const tag = state.tag ?? (latest ? latest.tag_name : null);
+      const isInstaller = dduInstallKind === "installer";
+      const downloading = state.phase === "downloading";
+      const downloaded = state.phase === "downloaded";
+      const title = downloaded
+        ? (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
+            children: [
+              t("updates.downloadedTitle"),
+              tag === null ? "" : " " + tag,
+            ],
+          })
+        : (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
+            children: [
+              t("updates.updateAvailable"),
+              tag === null ? "" : " " + tag,
+            ],
+          });
+      const description = [
+        latest?.publishedAt === undefined || latest?.publishedAt === null
+          ? ""
+          : String(latest.publishedAt) === ""
+            ? ""
+            : t("updates.releasedAt") + " " + String(latest.publishedAt).slice(0, 10),
+        latest?.body === undefined || latest?.body === null
+          ? ""
+          : String(latest.body) === ""
+            ? ""
+            : t("updates.releaseNotes"),
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      const downloadProgress =
+        downloading &&
+        (0, react_jsx_runtime.jsxs)("div", {
+          className: "dduiU_dlBlock",
+          children: [
+            (0, react_jsx_runtime.jsx)("div", {
+              className: "dduiU_progress",
+              children: (0, react_jsx_runtime.jsx)("div", {
+                className: "dduiU_progressBar",
+                style: { width: Math.min(100, Math.max(0, state.percent)) + "%" },
+              }),
+            }),
+            (0, react_jsx_runtime.jsxs)("div", {
+              className: "dduiU_progressText",
               children: [
-                (0, react_jsx_runtime.jsx)(
-                  _deepseek_ai_dsh_client_ui_primitives.Button,
-                  {
-                    variant: "outline",
-                    onClick: () => {
-                      setDialog(null);
-                    },
-                    children: t("updates.notNow"),
-                  },
-                ),
-                (0, react_jsx_runtime.jsx)(
-                  _deepseek_ai_dsh_client_ui_primitives.Button,
-                  {
-                    variant: "primary",
-                    onClick: goDownload,
-                    children: t("updates.download"),
-                  },
-                ),
+                Math.round(state.percent) + "%",
+                " · ",
+                formatBytes(state.transferred),
+                " / ",
+                formatBytes(state.total),
               ],
             }),
+          ],
+        });
+      const remindRow =
+        isInstaller && !downloading && !downloaded
+          ? (0, react_jsx_runtime.jsxs)("label", {
+              className: "dduiU_remindRow",
+              children: [
+                (0, react_jsx_runtime.jsx)("input", {
+                  type: "checkbox",
+                  checked: remindOff,
+                  onChange: (event) => {
+                    setRemindOff(event.target.checked);
+                    if (event.target.checked) dismissUpdateReminder();
+                  },
+                }),
+                (0, react_jsx_runtime.jsx)("span", {
+                  children: t("updates.dismissReminder"),
+                }),
+              ],
+            })
+          : null;
+      let footer = null;
+      if (downloading) {
+        footer = null;
+      } else if (downloaded) {
+        footer = (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
+          children: [
+            (0, react_jsx_runtime.jsx)(
+              _deepseek_ai_dsh_client_ui_primitives.Button,
+              {
+                variant: "outline",
+                onClick: closeUpdateDialog,
+                children: t("updates.notNow"),
+              },
+            ),
+            (0, react_jsx_runtime.jsx)(
+              _deepseek_ai_dsh_client_ui_primitives.Button,
+              {
+                variant: "primary",
+                onClick: quitAndInstallUpdate,
+                children: t("updates.restartInstall"),
+              },
+            ),
+          ],
+        });
+      } else {
+        footer = (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
+          children: [
+            (0, react_jsx_runtime.jsx)(
+              _deepseek_ai_dsh_client_ui_primitives.Button,
+              {
+                variant: "outline",
+                onClick: closeUpdateDialog,
+                children: t("updates.notNow"),
+              },
+            ),
+            (0, react_jsx_runtime.jsx)(
+              _deepseek_ai_dsh_client_ui_primitives.Button,
+              {
+                variant: "primary",
+                onClick: startUpdateDownload,
+                children: isInstaller
+                  ? t("updates.installNow")
+                  : t("updates.download"),
+              },
+            ),
+          ],
+        });
+      }
+      return (0, react_jsx_runtime.jsx)(
+        _deepseek_ai_dsh_client_ui_primitives.Modal,
+        {
+          open: true,
+          onClose: closeUpdateDialog,
+          title,
+          description,
+          closeLabel: t("updates.notNow"),
+          children: (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
+            children: [downloadProgress, remindRow],
           }),
+          footer,
+        },
+      );
+    }
+
+    /**
+     * 侧边栏底部「更新」按钮（sidebar.footer.action，设置按钮旁边）：
+     *   - 仅展开态显示（wide），收起侧栏不显示、不影响设置按钮图标；
+     *   - 仅存在新版本时显示；
+     *   - 点击打开更新弹窗。
+     */
+    function SidebarUpdateAction({ wide, t }) {
+      const state = useUpdateState();
+      const showButton = wide && state.available;
+      return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
+        children: [
+          showButton
+            ? (0, react_jsx_runtime.jsx)("button", {
+                type: "button",
+                className: "dduiU_sideBtn",
+                title: state.tag === null ? t("updates.updateAvailable") : t("updates.updateAvailable") + " " + state.tag,
+                onClick: openUpdateDialog,
+                children: t("updates.sidebarUpdate"),
+              })
+            : null,
+          (0, react_jsx_runtime.jsx)(UpdateDialog, { t }),
         ],
       });
     }
@@ -478,6 +769,11 @@ window.__ModuleLoader__.load({
       "updates.releaseNotes": "更新说明：",
       "updates.download": "前往下载",
       "updates.notNow": "暂不",
+      "updates.sidebarUpdate": "更新",
+      "updates.installNow": "立即更新",
+      "updates.restartInstall": "立即重启安装",
+      "updates.downloadedTitle": "更新已就绪",
+      "updates.dismissReminder": "下次不再自动提醒",
       "feature.title": "检查更新",
       "feature.description": "在设置中显示「检查更新」入口，手动检查 DSH Desktop 新版本并跳转下载",
     };
@@ -505,6 +801,11 @@ window.__ModuleLoader__.load({
       "updates.releaseNotes": "Release notes:",
       "updates.download": "Go to download",
       "updates.notNow": "Not now",
+      "updates.sidebarUpdate": "Update",
+      "updates.installNow": "Update now",
+      "updates.restartInstall": "Restart and install",
+      "updates.downloadedTitle": "Update ready",
+      "updates.dismissReminder": "Don't remind me again",
       "feature.title": "Check for updates",
       "feature.description":
         "Show the update-check entry in settings, manually check for new DSH Desktop versions and jump to the download page",
@@ -553,6 +854,7 @@ window.__ModuleLoader__.load({
         };
         if (config.enabled) {
           install(() => installUpdatesCss());
+          install(() => installSidebarCss());
           install(() =>
             ctx.slots.inject("settings.section", () =>
               ctx.slots.register(
@@ -567,6 +869,20 @@ window.__ModuleLoader__.load({
               ),
             ),
           );
+          // 侧边栏底部「更新」按钮（设置按钮旁边，仅展开态 + 有新版本时显示）。
+          install(() =>
+            ctx.slots.inject("sidebar.footer.action", () =>
+              ctx.slots.register(
+                {
+                  name: "sidebar.footer.action",
+                  id: "updates",
+                  order: 10,
+                  locale: NS,
+                },
+                SidebarUpdateAction,
+              ),
+            ),
+          );
         }
         return disposers;
       };
@@ -576,8 +892,28 @@ window.__ModuleLoader__.load({
         active = installSection(config);
       };
       applyConfig({ ...dduUpdatesDefaultConfig });
+      // 主进程自动更新事件（electron-updater：发现更新 / 下载进度 / 下载完成）。
+      ctx.effect(
+        () => {
+          if (
+            typeof window === "undefined" ||
+            typeof window.addEventListener !== "function"
+          ) {
+            return () => {};
+          }
+          window.addEventListener("dsh-desktop-update-event", onUpdateEvent);
+          return () =>
+            window.removeEventListener(
+              "dsh-desktop-update-event",
+              onUpdateEvent,
+            );
+        },
+        "dsh-desktop-updates: update events",
+      );
       void loadUpdatesConfig().then((config) => {
         applyConfig(config);
+        // 启动时刷新「是否有新版本」状态（走缓存），决定侧栏按钮显隐；
+        // 便携版额外弹可点击的下载提示。
         if (config.enabled) void autoCheckOnLaunch();
       });
     }
@@ -616,34 +952,27 @@ window.__ModuleLoader__.load({
       setTimeout(() => tag.remove(), 15000);
     }
 
-    /** 启动时静默检查更新：有新版本弹出可点击提示，无更新不打扰。 */
+    /**
+     * 启动时刷新更新状态（走缓存）：安装版据此显示侧栏「更新」按钮
+     * （自动弹窗由主进程 electron-updater 事件负责）；便携版额外弹
+     * 可点击的下载提示，避免与安装版的双重通知。
+     */
     async function autoCheckOnLaunch() {
       try {
-        const infoRes = await fetch("/api/desktop-updates/version", {
-          headers: { accept: "application/json" },
-          cache: "no-store",
-        });
-        if (!infoRes.ok) return;
-        const infoBody = await infoRes.json();
-        // 安装版由主进程 electron-updater 负责自动更新，这里只处理便携版，避免双重通知。
-        if (infoBody?.installKind !== "portable") return;
-        const currentVersion =
-          typeof infoBody?.currentVersion === "string"
-            ? infoBody.currentVersion
-            : null;
-        if (currentVersion === null) return;
-        const latest = await fetchLatestRelease();
-        if (latest === null || typeof latest?.tag_name !== "string") return;
-        if (compareVersions(latest.tag_name, currentVersion) <= 0) return;
-        const asset = pickAsset(latest.assets, infoBody?.installKind ?? null);
+        const { info } = await refreshUpdateState();
+        if (info?.installKind !== "portable") return;
+        const state = getUpdateState();
+        if (!state.available || state.tag === null) return;
+        const latest = state.latest;
+        const asset = pickAsset(latest?.assets, "portable");
         const url =
           (typeof asset?.browser_download_url === "string"
             ? asset.browser_download_url
             : null) ??
-          (typeof latest.html_url === "string"
+          (typeof latest?.html_url === "string"
             ? latest.html_url
             : "https://github.com/CCMu04/DSHDesktop/releases");
-        showUpdateToast(latest.tag_name, url);
+        showUpdateToast(state.tag, url);
       } catch {
         // 启动期静默失败，不打扰用户。
       }

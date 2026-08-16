@@ -35,6 +35,7 @@ import {
   LATEST_RELEASE_URL,
 } from './update-check.mjs'
 import { clearAutoCheck, recordAutoCheck, shouldAutoCheck } from './update-throttle.mjs'
+import { readDismissedVersion, recordDismissedVersion } from './update-prompt.mjs'
 import {
   parseWindowState,
   sanitizeWindowState,
@@ -78,6 +79,9 @@ const titleBarThemeMarker = '__DSH_TITLEBAR_THEME__:'
 // 完成提醒通知被点击时，渲染进程 window.focus() 无法恢复最小化窗口，
 // 主进程收到该标记后 restore + show + focus。
 const desktopWakeMarker = '__DSH_DESKTOP_WAKE__:'
+// 渲染进程 → 主进程的自动更新命令（console 标记通道）：start 开始下载、
+// dismiss 记录「不再提醒」版本、quit-install 立即重启安装。
+const desktopUpdateMarker = '__DSH_DESKTOP_UPDATE__:'
 
 // Windows toasts (HTML5 Notification → system notifications) are attributed
 // through the AppUserModelID: without it Electron falls back to a generic
@@ -617,6 +621,16 @@ function configureNavigation(window) {
       syncTitleBarOverlayFromNativeTheme(window)
       return
     }
+    // 更新事件在页面加载完成前到达时补发（例如启动即检测到新版本）。
+    if (pendingUpdateEvent !== null) {
+      const payload = pendingUpdateEvent
+      pendingUpdateEvent = null
+      void window.webContents
+        .executeJavaScript(
+          `window.dispatchEvent(new CustomEvent('dsh-desktop-update-event', { detail: ${JSON.stringify(payload)} }))`,
+        )
+        .catch(() => {})
+    }
     void window.webContents.executeJavaScript(`
       if (!document.getElementById('dsh-desktop-drag-style')) {
         const dragStyle = document.createElement('style')
@@ -681,6 +695,19 @@ function configureNavigation(window) {
     if (typeof message !== 'string') return
     if (message.startsWith(desktopWakeMarker)) {
       showMainWindow()
+      return
+    }
+    if (message.startsWith(desktopUpdateMarker)) {
+      const command = message.slice(desktopUpdateMarker.length).trim()
+      if (command === 'start' && pendingUpdateVersion !== null) {
+        // 用户点了「立即更新」：开始后台下载（进度经事件推回页面）。
+        autoUpdater.downloadUpdate().catch(() => {})
+      } else if (command === 'dismiss' && pendingUpdateVersion !== null) {
+        // 用户勾选「下次不再自动提醒」：记录版本，之后不再自动弹窗。
+        recordDismissedVersion(pendingUpdateVersion)
+      } else if (command === 'quit-install') {
+        autoUpdater.quitAndInstall()
+      }
       return
     }
     if (!message.startsWith(titleBarThemeMarker)) return
@@ -797,27 +824,57 @@ function stopBackend() {
   }
 }
 
+// 待下载的更新版本号（update-available 后记录，供 start/dismiss 命令使用）。
+let pendingUpdateVersion = null
+// 页面尚未就绪时暂存的更新事件（backend 页加载完成后补发）。
+let pendingUpdateEvent = null
+
+// 主进程 → 页面：把自动更新状态变更派发给 dsh-desktop-updates 插件
+// （CustomEvent，与托盘命令同通道）。页面未就绪时暂存，did-finish-load 补发。
+function dispatchUpdateEvent(payload) {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (!isBackendUrl(mainWindow.webContents.getURL())) {
+    pendingUpdateEvent = payload
+    return
+  }
+  pendingUpdateEvent = null
+  void mainWindow.webContents
+    .executeJavaScript(
+      `window.dispatchEvent(new CustomEvent('dsh-desktop-update-event', { detail: ${JSON.stringify(payload)} }))`,
+    )
+    .catch(() => {})
+}
+
 function initAutoUpdater() {
   // 仅打包版本启用自动更新（开发模式无发布通道）。
   if (!app.isPackaged) return
   // 便携版无法静默替换运行中的 exe：跳过自动更新，改用设置里的手动「检查更新」。
   if (process.env.PORTABLE_EXECUTABLE_DIR) return
-  autoUpdater.autoDownload = true
+  // 不静默下载：检测到更新先弹窗询问（标准更新流程），用户确认后才下载。
+  autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.on('update-available', (info) => {
+    recordAutoCheck()
+    const version = typeof info?.version === 'string' ? info.version : ''
+    if (version === '') return
+    pendingUpdateVersion = version
+    // 「下次不再自动提醒」过的版本不再弹窗（侧边栏「更新」按钮不受影响）。
+    if (readDismissedVersion() === version) return
+    dispatchUpdateEvent({ type: 'update-available', version })
+  })
+  autoUpdater.on('update-not-available', () => recordAutoCheck())
+  autoUpdater.on('download-progress', (progress) => {
+    dispatchUpdateEvent({
+      type: 'download-progress',
+      percent: progress?.percent ?? 0,
+      transferred: progress?.transferred ?? 0,
+      total: progress?.total ?? 0,
+      bytesPerSecond: progress?.bytesPerSecond ?? 0,
+    })
+  })
   autoUpdater.on('update-downloaded', (info) => {
-    void dialog
-      .showMessageBox({
-        type: 'info',
-        title: '更新已就绪',
-        message: `新版本 ${info.version} 已下载完成`,
-        detail: '应用将在退出时自动安装更新。',
-        buttons: ['立即重启并安装', '稍后'],
-        defaultId: 0,
-        cancelId: 1,
-      })
-      .then(({ response }) => {
-        if (response === 0) autoUpdater.quitAndInstall()
-      })
+    const version = typeof info?.version === 'string' ? info.version : ''
+    dispatchUpdateEvent({ type: 'update-downloaded', version })
   })
   autoUpdater.on('error', (error) => {
     // 静默记录：自动更新失败不影响正常使用，可到 设置 → 检查更新 手动检查。
@@ -825,8 +882,6 @@ function initAutoUpdater() {
     // 失败（网络 / GitHub API 限流）时清除节流记录，下次启动立即重试。
     clearAutoCheck()
   })
-  autoUpdater.on('update-available', () => recordAutoCheck())
-  autoUpdater.on('update-not-available', () => recordAutoCheck())
   // GitHub 未认证 API 限流保护：成功检查后 1 小时内不再重复检查，
   // 避免每次启动都消耗配额（运营商 NAT 下多用户共享出口 IP）。
   if (!shouldAutoCheck()) return

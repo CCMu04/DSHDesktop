@@ -1,6 +1,6 @@
 {
   "name": "deepseek-harness-desktop",
-  "version": "0.1.0-rc.6.6.3",
+  "version": "0.1.0-rc.6.6.4",
   "description": "Unofficial Windows desktop shell for the unmodified DeepSeek Harness Web UI",
   "author": "CCMu04",
   "license": "MIT",
@@ -78,6 +78,7 @@
       "builtin-plugin.mjs",
       "close-behavior.mjs",
       "update-check.mjs",
+      "update-prompt.mjs",
       "update-throttle.mjs",
       "window-state.mjs",
       "native-open-bridge.mjs",
