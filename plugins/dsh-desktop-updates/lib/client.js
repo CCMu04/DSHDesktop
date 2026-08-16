@@ -74,12 +74,12 @@ window.__ModuleLoader__.load({
       ".dduiU_section{width:100%;max-width:760px;color:var(--dsw-alias-label-primary);flex-direction:column;gap:16px;display:flex}.dduiU_block{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;flex-direction:column;gap:12px;padding:14px 16px;display:flex}.dduiU_row{align-items:center;justify-content:space-between;gap:12px;display:flex}.dduiU_rowLabel{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}.dduiU_rowValue{color:var(--dsw-alias-label-primary);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.5}.dduiU_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}@keyframes dduiU_fadeIn{from{opacity:0}}@keyframes dduiU_progressFlow{0%{background-position:0 0}100%{background-position:24px 0}}.dduiU_dlgOverlay{position:fixed;inset:0;z-index:3000;display:none;align-items:center;justify-content:center;padding:24px;animation:dduiU_fadeIn .15s ease-out}.dduiU_dlgMask{position:absolute;inset:0;background:rgba(0,0,0,.24);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}.dduiU_dlgPanel{position:relative;z-index:1;display:flex;flex-direction:column;gap:14px;width:min(400px,100%);max-height:calc(100vh - 48px);overflow:auto;box-sizing:border-box;padding:22px 24px 24px;border-radius:24px;border:1px solid var(--dsw-alias-border-inverted);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-shadow-lv3);color:var(--dsw-alias-label-primary);font-size:14px}.dduiU_dlgHeader{display:flex;align-items:center;justify-content:space-between;gap:8px}.dduiU_dlgTitle{margin:0;font-size:16px;line-height:24px;font-weight:500;color:var(--dsw-alias-label-primary)}.dduiU_dlgClose{flex:none;width:28px;height:28px;border:none;border-radius:8px;background:transparent;cursor:pointer;color:var(--dsw-alias-label-secondary);font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center}.dduiU_dlgClose:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.dduiU_dlgVersionRow{display:flex;align-items:center;gap:8px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-secondary)}.dduiU_dlgVersionRow .dduiU_dlgArrow{color:var(--dsw-alias-label-tertiary)}.dduiU_dlgVersionRow .dduiU_dlgNew{color:var(--dsw-alias-state-info-primary,#3b82f6);font-weight:600}.dduiU_dlgDesc{margin:0;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);word-break:break-word}.dduiU_dlgNotes{max-height:180px;overflow:auto;box-sizing:border-box;padding:10px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.6;word-break:break-word}.dduiU_dlgNotes a{color:var(--dsw-alias-state-info-primary,#3b82f6);text-decoration:none}.dduiU_dlgNotes a:hover{text-decoration:underline}.dduiU_dlgNotes ul{margin:4px 0;padding-left:20px}.dduiU_dlgNotes li{margin:2px 0}.dduiU_dlgNotes p{margin:4px 0}.dduiU_dlgNotes h1,.dduiU_dlgNotes h2,.dduiU_dlgNotes h3{font-size:14px;font-weight:600;margin:8px 0 4px}.dduiU_dlgNotes h4,.dduiU_dlgNotes h5,.dduiU_dlgNotes h6{font-size:13px;font-weight:600;margin:6px 0 4px}.dduiU_dlgNotes code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l2);border-radius:4px;padding:1px 4px}.dduiU_dlgNotes hr{border:none;border-top:1px solid var(--dsw-alias-border-l2);margin:8px 0}.dduiU_dlgBody{display:flex;flex-direction:column;min-width:0;gap:10px}.dduiU_dlgFooter{display:flex;align-items:center;justify-content:flex-end;gap:8px}.dduiU_dlgBtn{height:36px;padding:0 16px;border-radius:12px;font-size:14px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-family:inherit;background:transparent;border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);transition:background .12s ease-out}.dduiU_dlgBtn:hover{background:var(--dsw-alias-interactive-bg-hover)}.dduiU_dlgBtnPrimary{background:var(--dsw-alias-button-elevated-fill);border:1px solid transparent;color:var(--dsw-alias-label-primary);transition:filter .12s ease-out}.dduiU_dlgBtnPrimary:hover{filter:brightness(1.08);background:var(--dsw-alias-button-elevated-fill)}.dduiU_dlgProgress{height:6px;border-radius:3px;background:var(--dsw-alias-bg-layer-2);overflow:hidden}.dduiU_dlgProgressBar{height:100%;border-radius:3px;background:linear-gradient(90deg,#3b82f6,#60a5fa);background-size:24px 100%;animation:dduiU_progressFlow .8s linear infinite;transition:width .15s ease-out}.dduiU_dlgProgressText{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5}.dduiU_dlgRemind{display:flex;align-items:center;gap:8px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.5;cursor:pointer}.dduiU_dlgRemind input{accent-color:var(--dsw-alias-state-info-primary,#3b82f6);width:14px;height:14px;margin:0;cursor:pointer}";
     const updatesTagId = "dsh-desktop-updates/UpdatesSection.module.css";
     const installUpdatesCss = () => dduInstallCss(updatesCss, updatesTagId);
-    // 侧边栏底部「更新」按钮样式。footer 槽位行高度压为 0，
-    // 按钮悬浮在设置按钮行右侧空白处（设置按钮保持全宽不受影响）；
-    // 收起态（wide=false）组件不渲染，设置按钮图标不受影响。
-    // 若 hashed 类匹配失败，按钮退化为独立一行，设置按钮仍完好。
+    // 侧边栏底部「更新」按钮。有更新时（body 标记）foot 区改横排：
+    // 设置按钮 flex:1 占满剩余宽度，更新按钮 flex:0 取自然宽度，互不交叠、
+    // hover 高亮各自独立；无更新时布局完全还原。收起态（wide=false）
+    // 组件不渲染，设置按钮图标不受影响。
     const sidebarCss =
-      ".dduiU_sideBtn{height:32px;padding:0 12px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-button-elevated-fill);color:var(--dsw-alias-label-primary);font-size:13px;line-height:1;white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;position:relative;z-index:2;margin-left:auto;margin-top:5px;margin-right:4px}.dduiU_sideBtn:hover{background:var(--dsw-alias-button-floating-hover)}[class$=\"_footerActions\"]{height:0;overflow:visible}body.ddu-update-available [class$=\"_settingsArea\"]{padding-right:52px}";
+      ".dduiU_sideBtn{height:32px;padding:0 12px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-button-elevated-fill);color:var(--dsw-alias-label-primary);font-size:13px;line-height:1;white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}.dduiU_sideBtn:hover{background:var(--dsw-alias-button-floating-hover)}body.ddu-update-available [class$=\"_footArea\"]{flex-direction:row;align-items:center;gap:8px}body.ddu-update-available [class$=\"_settingsArea\"]{flex:1 1 auto;min-width:0;width:auto}body.ddu-update-available [class$=\"_footerActions\"]{flex:0 0 auto;width:auto;height:auto;overflow:visible}";
     const sidebarTagId = "dsh-desktop-updates/SidebarUpdateAction.module.css";
     const installSidebarCss = () => dduInstallCss(sidebarCss, sidebarTagId);
     //#endregion
@@ -129,44 +129,15 @@ window.__ModuleLoader__.load({
     /** 本机安装方式（installer | portable | dev），由 version 接口注入。 */
     let dduInstallKind = null;
     let dduUpdateListeners = new Set();
-    /** 有更新时给 body 加标记，并强制压缩设置按钮宽度（内联样式，必定生效）。 */
+    /** 有更新时给 body 加标记（侧栏 foot 区据此切换横排布局）。 */
     function syncUpdateBodyClass() {
       try {
         if (typeof document === "undefined") return;
-        const available = getUpdateState().available;
-        document.body.classList.toggle("ddu-update-available", available);
-        const area = document.querySelector('[class$="_settingsArea"]');
-        const trigger =
-          area !== null ? area.querySelector('[class$="_trigger"]') : null;
-        if (trigger !== null) {
-          // 内联宽度覆盖官方 calc(100% + 8px)：让出右侧空间给「更新」按钮，
-          // 设置按钮的 hover 高亮随之收窄。
-          trigger.style.width = available ? "calc(100% - 48px)" : "";
-        }
-        dduDbg(
-          "syncBody: avail=" +
-            available +
-            " areaW=" +
-            (area !== null
-              ? Math.round(area.getBoundingClientRect().width)
-              : -1) +
-            " triggerW=" +
-            (trigger !== null
-              ? Math.round(trigger.getBoundingClientRect().width)
-              : -1),
+        document.body.classList.toggle(
+          "ddu-update-available",
+          getUpdateState().available,
         );
       } catch {}
-    }
-    /** 侧栏可能晚于插件状态变化挂载：available 翻转后重试几次应用宽度。 */
-    function syncUpdateBodyClassWithRetry() {
-      syncUpdateBodyClass();
-      if (!getUpdateState().available) return;
-      let attempts = 0;
-      const timer = setInterval(() => {
-        attempts += 1;
-        syncUpdateBodyClass();
-        if (attempts >= 5) clearInterval(timer);
-      }, 800);
     }
     function setUpdateState(patch) {
       Object.assign(dduUpdateState, patch);
@@ -174,7 +145,7 @@ window.__ModuleLoader__.load({
       // bail-out 不重渲染（此前的原地变更导致弹窗宿主永不刷新）。
       const snapshot = { ...dduUpdateState };
       for (const fn of dduUpdateListeners) fn(snapshot);
-      syncUpdateBodyClassWithRetry();
+      syncUpdateBodyClass();
     }
     function getUpdateState() {
       return dduUpdateState;
