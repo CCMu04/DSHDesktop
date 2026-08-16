@@ -866,6 +866,7 @@ function initAutoUpdater() {
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
   autoUpdater.on('update-available', (info) => {
+    appendBackendOutput(`Auto-update event: update-available ${String(info?.version)}\n`)
     recordAutoCheck()
     const version = typeof info?.version === 'string' ? info.version : ''
     if (version === '') return
@@ -874,7 +875,10 @@ function initAutoUpdater() {
     if (readDismissedVersion() === version) return
     dispatchUpdateEvent({ type: 'update-available', version })
   })
-  autoUpdater.on('update-not-available', () => recordAutoCheck())
+  autoUpdater.on('update-not-available', () => {
+    appendBackendOutput('Auto-update event: update-not-available\n')
+    recordAutoCheck()
+  })
   autoUpdater.on('download-progress', (progress) => {
     dispatchUpdateEvent({
       type: 'download-progress',
@@ -896,8 +900,22 @@ function initAutoUpdater() {
   })
   // GitHub 未认证 API 限流保护：成功检查后 1 小时内不再重复检查，
   // 避免每次启动都消耗配额（运营商 NAT 下多用户共享出口 IP）。
+  appendBackendOutput(
+    `Auto-update init: packaged=${app.isPackaged} portable=${Boolean(process.env.PORTABLE_EXECUTABLE_DIR)} shouldCheck=${shouldAutoCheck()}\n`,
+  )
   if (!shouldAutoCheck()) return
-  autoUpdater.checkForUpdates().catch(() => {})
+  const checkPromise = autoUpdater.checkForUpdates()
+  checkPromise.then(
+    (result) => {
+      appendBackendOutput(
+        `Auto-update check resolved: ${result === null ? 'null' : 'ok'}\n`,
+      )
+    },
+    (error) => {
+      appendBackendOutput(`Auto-update check rejected: ${String(error)}\n`)
+    },
+  )
+  checkPromise.catch(() => {})
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
