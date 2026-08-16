@@ -194,12 +194,16 @@ window.__ModuleLoader__.load({
         const onKeyDown = (event) => {
           if (event.key === "Escape") hideFloatingMenu();
         };
+        // 只响应视口滚动（window）：菜单是 position:fixed，内部容器滚动
+        // （如 AI 流式输出时消息流自动滚动）不影响它的位置，若监听
+        // document capture 会被任意元素滚动触发——右键菜单在 AI 对话
+        // 期间被持续关掉。
         const onScroll = () => hideFloatingMenu();
         document.addEventListener("keydown", onKeyDown, true);
-        document.addEventListener("scroll", onScroll, true);
+        window.addEventListener("scroll", onScroll, true);
         return () => {
           document.removeEventListener("keydown", onKeyDown, true);
-          document.removeEventListener("scroll", onScroll, true);
+          window.removeEventListener("scroll", onScroll, true);
         };
       }, [menu]);
       if (menu === null) return null;
