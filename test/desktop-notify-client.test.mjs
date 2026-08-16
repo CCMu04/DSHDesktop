@@ -9,12 +9,15 @@ import { readFileSync } from 'node:fs'
 // --- minimal browser-ish environment -------------------------------------
 const loaded = []
 const windowListeners = {}
+let focusCalls = 0
 globalThis.window = {
   __ModuleLoader__: { load(entry) { loaded.push(entry) } },
   innerWidth: 1280,
   innerHeight: 800,
   open() {},
-  focus() {},
+  focus() {
+    focusCalls += 1
+  },
   addEventListener(type, fn) {
     ;(windowListeners[type] ??= []).push(fn)
   },
@@ -67,6 +70,7 @@ globalThis.location = { reload() {} }
 let sessionListener = null
 let listListener = null
 let sessionSnap = { running: false, nodes: [] }
+const openedSessions = []
 const sessions = {
   list: {
     getSnapshot: () => ({ current: 's1' }),
@@ -74,6 +78,9 @@ const sessions = {
       listListener = fn
       return () => { listListener = null }
     },
+  },
+  open(id) {
+    openedSessions.push(id)
   },
   binding(id) {
     if (id !== 's1') return void 0
@@ -151,6 +158,15 @@ if (notifications.length !== 1) throw new Error(`expected 1 notification, got ${
 const n1 = notifications[0]
 if (n1.title !== 'notify.title') throw new Error(`title wrong: ${n1.title}`)
 if (n1.options.body !== '你好，世界！') throw new Error(`body wrong: ${n1.options.body}`)
+
+// 点击通知 → 聚焦窗口并跳转到该通知对应的会话（sessions.open）
+focusCalls = 0
+openedSessions.length = 0
+n1.onclick()
+if (focusCalls !== 1) throw new Error(`click should focus the window, focusCalls=${focusCalls}`)
+if (openedSessions.length !== 1 || openedSessions[0] !== 's1') {
+  throw new Error(`click should open the notification's session, got ${JSON.stringify(openedSessions)}`)
+}
 
 // 2) window focused → no notification
 notifications.length = 0

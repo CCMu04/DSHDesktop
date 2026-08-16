@@ -70,6 +70,10 @@ const titleBarOverlayOptions = { color: '#00000000', height: 38 }
 const titleBarSymbolLight = '#22252b'
 const titleBarSymbolDark = '#ebeef2'
 const titleBarThemeMarker = '__DSH_TITLEBAR_THEME__:'
+// 渲染进程 → 主进程的「唤醒窗口」信标（console 标记通道，与主题标记同款）：
+// 完成提醒通知被点击时，渲染进程 window.focus() 无法恢复最小化窗口，
+// 主进程收到该标记后 restore + show + focus。
+const desktopWakeMarker = '__DSH_DESKTOP_WAKE__:'
 
 // Windows toasts (HTML5 Notification → system notifications) are attributed
 // through the AppUserModelID: without it Electron falls back to a generic
@@ -665,9 +669,17 @@ function configureNavigation(window) {
   // Window Controls Overlay symbol color follows it. While the loading page
   // is up (it follows the OS scheme), track OS theme changes too — once the
   // backend page loads, its own report takes over.
+  // The completion-reminder plugin raises the desktop wake marker when a
+  // system notification is clicked: restore/focus the window (window.focus()
+  // in the renderer cannot unminimize), so the click always lands on the chat.
   window.webContents.on('console-message', details => {
     const message = details?.message
-    if (typeof message !== 'string' || !message.startsWith(titleBarThemeMarker)) return
+    if (typeof message !== 'string') return
+    if (message.startsWith(desktopWakeMarker)) {
+      showMainWindow()
+      return
+    }
+    if (!message.startsWith(titleBarThemeMarker)) return
     const dark = message.slice(titleBarThemeMarker.length).includes('dark')
     syncTitleBarOverlay(window, dark ? titleBarSymbolDark : titleBarSymbolLight)
   })
