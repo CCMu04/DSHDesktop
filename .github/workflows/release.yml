@@ -29,20 +29,13 @@ jobs:
       - run: npm run prepare:runtime
       - run: npm run prepare:node
       - run: npx electron-builder --win nsis portable --x64 --publish never
-      - name: Stage release assets
-        shell: pwsh
-        run: |
-          # 把两个安装包收进独立目录：gh release create 对文件参数做 glob
-          # 展开，setup 文件名里的 [recommend] 会被当作字符类（既匹配不到
-          # 字面文件名，也不支持 \[ 转义）——传目录让 gh 直接遍历上传。
-          New-Item -ItemType Directory -Force release-assets | Out-Null
-          Copy-Item dist/DSH-Desktop-Setup-*-x64*.exe release-assets/
-          Copy-Item dist/DSH-Desktop-Portable-*-x64.exe release-assets/
       - name: Save x64 assets
         uses: actions/upload-artifact@v4
         with:
           name: DSH-Desktop-${{ github.run_id }}-x64
-          path: release-assets
+          path: |
+            dist/DSH-Desktop-Setup-*-x64.exe
+            dist/DSH-Desktop-Portable-*-x64.exe
           if-no-files-found: error
 
   publish:
@@ -56,15 +49,11 @@ jobs:
           pattern: DSH-Desktop-${{ github.run_id }}-*
           path: dist
           merge-multiple: true
-      - name: Inspect downloaded assets
-        shell: pwsh
-        run: |
-          Get-ChildItem -LiteralPath dist -Recurse -File | Select-Object FullName
       - name: Verify preview assets
         shell: pwsh
         run: |
-          $assets = Get-ChildItem -LiteralPath dist -Recurse -File |
-            Where-Object Name -Match '^DSH-Desktop-(Setup-.+-x64\[recommend\]|Portable-.+-x64)\.exe$'
+          $assets = Get-ChildItem -LiteralPath dist -File |
+            Where-Object Name -Match '^DSH-Desktop-(Setup|Portable)-.+-x64\.exe$'
           if ($assets.Count -ne 2) {
             throw "Expected two release assets, found $($assets.Count)."
           }
@@ -76,10 +65,10 @@ jobs:
         shell: pwsh
         run: |
           $tag = if ($env:RELEASE_TAG) { $env:RELEASE_TAG } else { $env:GITHUB_REF_NAME }
-          # 用 gh 的 ** glob 递归匹配 dist 下的安装包（不含方括号元字符，
-          # 展开结果可含 [recommend] 字面文件名）；GitHub 端会把 asset 名里
-          # 的 [ ] 等非 [A-Za-z0-9._-] 字符替换为 .（如 x64.recommend.exe）。
-          gh release create $tag "dist/**/*.exe" `
+          $assets = Get-ChildItem -LiteralPath dist -File |
+            Where-Object Name -Match '^DSH-Desktop-(Setup|Portable)-.+-x64\.exe$' |
+            Select-Object -ExpandProperty FullName
+          gh release create $tag @assets `
             --repo $env:GITHUB_REPOSITORY `
             --title "DSH Desktop $tag" `
             --notes-file RELEASE_NOTES.md `

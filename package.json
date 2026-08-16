@@ -109,7 +109,7 @@
       "icon": "assets/icon.png"
     },
     "nsis": {
-      "artifactName": "DSH-Desktop-Setup-${version}-${arch}[recommend].${ext}",
+      "artifactName": "DSH-Desktop-Setup-${version}-${arch}.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
