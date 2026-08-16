@@ -79,7 +79,7 @@ window.__ModuleLoader__.load({
     // 收起态（wide=false）组件不渲染，设置按钮图标不受影响。
     // 若 hashed 类匹配失败，按钮退化为独立一行，设置按钮仍完好。
     const sidebarCss =
-      ".dduiU_sideBtn{height:32px;padding:0 12px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-button-elevated-fill);color:var(--dsw-alias-label-primary);font-size:13px;line-height:1;white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;position:relative;z-index:2;margin-left:auto;margin-top:5px;margin-right:4px}.dduiU_sideBtn:hover{background:var(--dsw-alias-button-floating-hover)}[class$=\"_footerActions\"]{height:0;overflow:visible}";
+      ".dduiU_sideBtn{height:32px;padding:0 12px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-button-elevated-fill);color:var(--dsw-alias-label-primary);font-size:13px;line-height:1;white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;position:relative;z-index:2;margin-left:auto;margin-top:5px;margin-right:4px}.dduiU_sideBtn:hover{background:var(--dsw-alias-button-floating-hover)}[class$=\"_footerActions\"]{height:0;overflow:visible}body.ddu-update-available [class$=\"_settingsArea\"]{padding-right:52px}";
     const sidebarTagId = "dsh-desktop-updates/SidebarUpdateAction.module.css";
     const installSidebarCss = () => dduInstallCss(sidebarCss, sidebarTagId);
     //#endregion
@@ -129,12 +129,23 @@ window.__ModuleLoader__.load({
     /** 本机安装方式（installer | portable | dev），由 version 接口注入。 */
     let dduInstallKind = null;
     let dduUpdateListeners = new Set();
+    /** 有更新时给 body 加标记：侧栏设置按钮让出右侧空间给「更新」按钮。 */
+    function syncUpdateBodyClass() {
+      try {
+        if (typeof document === "undefined") return;
+        document.body.classList.toggle(
+          "ddu-update-available",
+          getUpdateState().available,
+        );
+      } catch {}
+    }
     function setUpdateState(patch) {
       Object.assign(dduUpdateState, patch);
       // 发给监听器的是新引用快照：React setState 对同一对象引用会
       // bail-out 不重渲染（此前的原地变更导致弹窗宿主永不刷新）。
       const snapshot = { ...dduUpdateState };
       for (const fn of dduUpdateListeners) fn(snapshot);
+      syncUpdateBodyClass();
     }
     function getUpdateState() {
       return dduUpdateState;
