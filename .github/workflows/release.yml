@@ -29,15 +29,20 @@ jobs:
       - run: npm run prepare:runtime
       - run: npm run prepare:node
       - run: npx electron-builder --win nsis portable --x64 --publish never
+      - name: Stage release assets
+        shell: pwsh
+        run: |
+          # 把两个安装包收进独立目录：gh release create 对文件参数做 glob
+          # 展开，setup 文件名里的 [recommend] 会被当作字符类（既匹配不到
+          # 字面文件名，也不支持 \[ 转义）——传目录让 gh 直接遍历上传。
+          New-Item -ItemType Directory -Force release-assets | Out-Null
+          Copy-Item dist/DSH-Desktop-Setup-*-x64*.exe release-assets/
+          Copy-Item dist/DSH-Desktop-Portable-*-x64.exe release-assets/
       - name: Save x64 assets
         uses: actions/upload-artifact@v4
         with:
           name: DSH-Desktop-${{ github.run_id }}-x64
-          path: |
-            # 注意：artifact 路径是 glob，[recommend] 的方括号会被解析为
-            # 字符类——用 -x64*.exe 覆盖（匹配 DSH-Desktop-Setup-*-x64[recommend].exe）。
-            dist/DSH-Desktop-Setup-*-x64*.exe
-            dist/DSH-Desktop-Portable-*-x64.exe
+          path: release-assets
           if-no-files-found: error
 
   publish:
@@ -54,7 +59,7 @@ jobs:
       - name: Verify preview assets
         shell: pwsh
         run: |
-          $assets = Get-ChildItem -LiteralPath dist -File |
+          $assets = Get-ChildItem -LiteralPath dist/release-assets -File |
             Where-Object Name -Match '^DSH-Desktop-(Setup-.+-x64\[recommend\]|Portable-.+-x64)\.exe$'
           if ($assets.Count -ne 2) {
             throw "Expected two release assets, found $($assets.Count)."
@@ -67,14 +72,9 @@ jobs:
         shell: pwsh
         run: |
           $tag = if ($env:RELEASE_TAG) { $env:RELEASE_TAG } else { $env:GITHUB_REF_NAME }
-          # gh release create 会对上传路径做 glob 展开，[recommend] 的方括号
-          # 会被当作字符类而匹配不到字面文件名（"no matches found"）——
-          # 转义为 \[ \] 让 glob 匹配字面方括号。
-          $assets = Get-ChildItem -LiteralPath dist -File |
-            Where-Object Name -Match '^DSH-Desktop-(Setup-.+-x64\[recommend\]|Portable-.+-x64)\.exe$' |
-            Select-Object -ExpandProperty FullName |
-            ForEach-Object { $_.Replace('[', '\[').Replace(']', '\]') }
-          gh release create $tag @assets `
+          # 传目录（gh 遍历上传，文件名任意），避免 setup 文件名里的
+          # [recommend] 触发 gh 的 glob 字符类解析。
+          gh release create $tag dist/release-assets `
             --repo $env:GITHUB_REPOSITORY `
             --title "DSH Desktop $tag" `
             --notes-file RELEASE_NOTES.md `
