@@ -137,6 +137,17 @@ window.__ModuleLoader__.load({
           "ddu-update-available",
           getUpdateState().available,
         );
+        // 诊断：确认标记与设置区 padding 是否真正生效。
+        const area = document.querySelector('[class$="_settingsArea"]');
+        dduDbg(
+          "syncBody: bodyClass=" +
+            document.body.className.slice(0, 60) +
+            " areaFound=" +
+            (area !== null) +
+            (area !== null
+              ? " pad=" + getComputedStyle(area).paddingRight
+              : ""),
+        );
       } catch {}
     }
     function setUpdateState(patch) {
