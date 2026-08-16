@@ -150,7 +150,7 @@ window.__ModuleLoader__.load({
       // Header 页签行右端的 [|] 开合按钮：与打开工作区/导出会话同排。
       // Header 页签行右端的 [|] 开合按钮：与打开工作区 / 导出会话同排同风格
       // （dshDesktopUi_trigger 同款：28px 高、12px 字、图标 12 + 文字）。
-      ".ddwb_toggleBtn{box-sizing:border-box;min-height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:0;border-radius:6px;align-items:center;gap:4px;padding:0 8px;font-size:12px;line-height:20px;white-space:nowrap;display:inline-flex}.ddwb_toggleBtn:hover:not(:disabled),.ddwb_toggleBtn:focus-visible{color:var(--dsw-alias-label-secondary)}.ddwb_toggleBtnActive{color:var(--dsw-alias-brand-primary)}.ddwb_toggleBtnActive:hover:not(:disabled),.ddwb_toggleBtnActive:focus-visible{color:var(--dsw-alias-brand-primary)}.ddwb_toggleBtn svg,.ddwb_toggleBtn span{flex:none}" +
+      ".ddwb_toggleBtn{box-sizing:border-box;min-height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:0;border-radius:6px;align-items:center;gap:4px;padding:0 8px;font-size:12px;line-height:20px;white-space:nowrap;display:inline-flex}.ddwb_toggleBtn:hover:not(:disabled),.ddwb_toggleBtn:focus-visible{color:var(--dsw-alias-label-secondary)}.ddwb_toggleBtn:disabled{opacity:.45;cursor:default}.ddwb_toggleBtnActive{color:var(--dsw-alias-brand-primary)}.ddwb_toggleBtnActive:hover:not(:disabled),.ddwb_toggleBtnActive:focus-visible{color:var(--dsw-alias-brand-primary)}.ddwb_toggleBtn svg,.ddwb_toggleBtn span{flex:none}" +
       // 官方左面板图标水平翻转 → 「右侧面板」（工作台在对话页右侧）。
       ".ddwb_panelRight{transform:scaleX(-1)}" +
       ".ddwb_card{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;padding:14px 16px;margin:12px}" +
@@ -187,7 +187,10 @@ window.__ModuleLoader__.load({
       const listeners = new Set();
       const actionHandlers = new Set();
       const stateListeners = new Set();
+      /** 历史消息加载中：官方 ChatView 显示「载入历史…」期间禁止打开面板。 */
+      const historyLoadingListeners = new Set();
       let open = false;
+      let historyLoading = false;
       const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0);
       const snapshot = () => ({
         tabs: Array.from(tabs.values()).sort(byOrder),
@@ -302,12 +305,16 @@ window.__ModuleLoader__.load({
           this.setOpen(false);
           dispatchAction({ type: "collapsePanel" });
         },
-        /** 切换面板开合（Header [|] 按钮）。 */
+        /** 切换面板开合（Header [|] 按钮；历史消息加载中禁止打开）。 */
         toggle() {
+          if (historyLoading) return;
           this.setOpen(!open);
         },
         /** 打开/收起面板（外部触发，如点击会话里的文件链接）。 */
         setOpen(value) {
+          // 历史消息加载中拒绝打开（关闭不受限）：加载期间打开会让
+          // 网格重排与官方滚动位置/高度调整互相干扰。
+          if (value === true && historyLoading) return;
           open = value === true;
           emitState();
         },
@@ -319,6 +326,26 @@ window.__ModuleLoader__.load({
         onOpenChange(listener) {
           stateListeners.add(listener);
           return () => stateListeners.delete(listener);
+        },
+        /** 历史消息加载状态（installDock 的 DOM 观察器写入）。 */
+        setHistoryLoading(value) {
+          historyLoading = value === true;
+          for (const listener of Array.from(historyLoadingListeners)) {
+            try {
+              listener(historyLoading);
+            } catch {
+              // A failing subscriber must not break the loading gate.
+            }
+          }
+        },
+        /** 当前历史消息加载状态。 */
+        isHistoryLoading() {
+          return historyLoading;
+        },
+        /** 订阅历史消息加载状态；返回 disposer。 */
+        onHistoryLoadingChange(listener) {
+          historyLoadingListeners.add(listener);
+          return () => historyLoadingListeners.delete(listener);
         },
         getSnapshot: snapshot,
         subscribe(listener) {
@@ -357,6 +384,30 @@ window.__ModuleLoader__.load({
         return document.querySelector(ddwbChatFlowSelector);
       } catch {
         return null;
+      }
+    }
+
+    /**
+     * 检测「历史消息加载中」：官方 ChatView 在 openState === "loading" 时于
+     * [data-chat-flow] 内渲染一个纯文本提示 div（内容为「载入历史…」/
+     * "Loading history…"）。hint 是消息流容器里唯一无子元素的叶子 div，
+     * 与消息节点（有子结构）区分；加载失败（openError）与分页按钮
+     * （older）不会误判——前者文本不匹配，后者带子 button。
+     */
+    function findHistoryLoading() {
+      try {
+        const flow = document.querySelector(ddwbChatFlowSelector);
+        if (flow === null || typeof flow.children === "undefined") return false;
+        for (const child of flow.children) {
+          if (typeof child.children !== "undefined" && child.children.length > 0) {
+            continue;
+          }
+          const text = (child.textContent ?? "").trim();
+          if (text === "载入历史…" || text === "Loading history…") return true;
+        }
+        return false;
+      } catch {
+        return false;
       }
     }
 
@@ -904,8 +955,17 @@ window.__ModuleLoader__.load({
       // 触发本观察器，若每次都用 trackWidth（打开时快照）覆盖轨道，拖动中
       // 的实时宽度会被立刻重置回原值（卡顿根因）。
       let lastShow = null;
+      let lastHistoryLoading = null;
+      const checkHistoryLoading = () => {
+        const loading = findHistoryLoading();
+        if (loading !== lastHistoryLoading) {
+          lastHistoryLoading = loading;
+          service.setHistoryLoading(loading);
+        }
+      };
       const flowObserver = new MutationObserver(() => {
         if (disposed) return;
+        checkHistoryLoading();
         if (findRoot() !== null) {
           tryAttach();
           const show = findChatFlow() !== null;
@@ -928,6 +988,7 @@ window.__ModuleLoader__.load({
       disposers.push(() => {
         flowObserver.disconnect();
       });
+      checkHistoryLoading();
       tryAttach();
 
       return () => {
@@ -955,15 +1016,31 @@ window.__ModuleLoader__.load({
     /** 官方 Header 页签行右端的 [|] 按钮：切换工作台开合（开着时高亮）。 */
     function WorkbenchToggleHeaderAction({ workbench, t }) {
       const [open, setOpen] = react.useState(() => workbench.isOpen());
+      const [historyLoading, setHistoryLoading] = react.useState(() =>
+        workbench.isHistoryLoading(),
+      );
       react.useEffect(
         () => workbench.onOpenChange(setOpen),
+        [workbench],
+      );
+      react.useEffect(
+        () => workbench.onHistoryLoadingChange(setHistoryLoading),
         [workbench],
       );
       return jsx("button", {
         type: "button",
         className: "ddwb_toggleBtn" + (open ? " ddwb_toggleBtnActive" : ""),
-        title: open ? t("closePanel") : t("openPanel"),
-        "aria-label": open ? t("closePanel") : t("openPanel"),
+        disabled: historyLoading,
+        title: historyLoading
+          ? t("loadingDisabledTitle")
+          : open
+            ? t("closePanel")
+            : t("openPanel"),
+        "aria-label": historyLoading
+          ? t("loadingDisabledTitle")
+          : open
+            ? t("closePanel")
+            : t("openPanel"),
         onClick: () => workbench.toggle(),
         children: [
           jsx(PanelRightIcon, {
@@ -985,6 +1062,7 @@ window.__ModuleLoader__.load({
       "toggle.label": "工作台",
       "openPanel": "打开工作台",
       "closePanel": "关闭工作台",
+      "loadingDisabledTitle": "历史消息加载中，请稍候",
       "resizePanel": "拖拽调整宽度，点击收起",
       "pickTitle": "选择一个功能标签页",
       "pickHint": "从上方标签栏选择（文件 / Git 等）开始使用",
@@ -1000,6 +1078,7 @@ window.__ModuleLoader__.load({
       "toggle.label": "Workbench",
       "openPanel": "Open workbench",
       "closePanel": "Close workbench",
+      "loadingDisabledTitle": "History is loading, please wait",
       "resizePanel": "Drag to resize, click to collapse",
       "pickTitle": "Pick a feature tab",
       "pickHint": "Choose one from the tab bar above (Files / Git, …) to get started",

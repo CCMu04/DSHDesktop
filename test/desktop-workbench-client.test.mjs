@@ -358,6 +358,27 @@ if (openStates.length < 3 || openStates[0] !== true || openStates[1] !== false |
 }
 openOff()
 
+// --- history-loading gate ----------------------------------------------------
+// 历史消息加载中：toggle / setOpen(true) 一律拒绝，关闭不受限。
+if (service.isHistoryLoading() !== false) throw new Error('history should start not loading')
+const loadingStates = []
+const loadingOff = service.onHistoryLoadingChange((value) => loadingStates.push(value))
+service.setHistoryLoading(true)
+if (service.isHistoryLoading() !== true) throw new Error('setHistoryLoading(true) not applied')
+service.setOpen(false)
+service.toggle()
+if (service.isOpen() !== false) throw new Error('toggle must be rejected while history loads')
+service.setOpen(true)
+if (service.isOpen() !== false) throw new Error('setOpen(true) must be rejected while history loads')
+service.setHistoryLoading(false)
+if (service.isHistoryLoading() !== false) throw new Error('setHistoryLoading(false) not applied')
+service.setOpen(true)
+if (service.isOpen() !== true) throw new Error('setOpen(true) should work after loading ends')
+if (loadingStates.length < 2 || loadingStates[0] !== true || loadingStates[1] !== false) {
+  throw new Error(`history-loading notifications wrong: ${JSON.stringify(loadingStates)}`)
+}
+loadingOff()
+
 // --- grid self-healing ------------------------------------------------------
 // React rewrites the root children: the child observer must re-append.
 const latestChildObserver = () => {
@@ -397,6 +418,28 @@ if (!root.children.includes(column)) {
 if (root.style.gridTemplateColumns !== 'minmax(0, 1fr) var(--ddwb-chat-track, 0px)') {
   throw new Error(`grid template lost after remount: ${root.style.gridTemplateColumns}`)
 }
+
+// DOM 检测：官方「载入历史…」hint 出现 → 服务进入加载态；移除 → 退出。
+const hint = fakeElement()
+hint.textContent = '载入历史…'
+flow.appendChild(hint)
+latestFlowObserver().callback()
+if (service.isHistoryLoading() !== true) {
+  throw new Error('hint div should mark history loading')
+}
+// 历史加载中打开被拒（服务层门禁）。
+service.setOpen(false)
+service.toggle()
+if (service.isOpen() !== false) {
+  throw new Error('toggle must be rejected while the hint is present')
+}
+flow.children.length = 0
+latestFlowObserver().callback()
+if (service.isHistoryLoading() !== false) {
+  throw new Error('hint removal should clear history loading')
+}
+// 恢复打开态（后续 root 重建测试沿用）。
+service.setOpen(true)
 
 // 会话切换：root 整棵重建（新 root 节点）→ 观察器检测宿主变化并重挂。
 const latestFlowObserverForRebuild = () => {

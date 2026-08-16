@@ -216,10 +216,44 @@ window.__ModuleLoader__.load({
     const ddffRetryLimit = 20;
     /** 文件子页签上限。 */
     const ddffMaxFiles = 20;
-    /** 目录树隐藏状态持久化 key（localStorage）。 */
-    const TREE_COLLAPSED_KEY = "dsh-desktop-files:treeCollapsed";
-    /** 代码预览自动换行状态持久化 key（localStorage）。 */
-    const WRAP_KEY = "dsh-desktop-files:wrap";
+    /**
+     * 偏好持久化走 host 端 /api/desktop-workbench/prefs（与工作台布局同一
+     * 文档、同一文件）。不能用 localStorage：后端端口每次启动随机变化，
+     * web origin 随之变化，localStorage 在重启后整体失效。
+     */
+    const PREF_URL = "/api/desktop-workbench/prefs";
+    const PREF_TREE_COLLAPSED = "files.treeCollapsed";
+    const PREF_TREE_WIDTH = "files.treeWidth";
+    const PREF_WRAP = "files.wrapMode";
+    const ddffPrefSaveDebounceMs = 400;
+
+    /** 读取全局偏好：失败回退空对象。 */
+    function loadFilePrefs() {
+      return fetch(PREF_URL, {
+        headers: { accept: "application/json" },
+        cache: "no-store",
+      })
+        .then((res) =>
+          res.ok
+            ? res.json()
+            : Promise.reject(new Error("prefs-http-" + res.status)),
+        )
+        .then((body) =>
+          body && typeof body.prefs === "object" && body.prefs !== null
+            ? body.prefs
+            : {},
+        )
+        .catch(() => ({}));
+    }
+
+    /** 写入偏好（白名单字段由 host 端窄化）。 */
+    function saveFilePrefs(patch) {
+      return fetch(PREF_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prefs: patch }),
+      }).catch(() => {});
+    }
 
     /** 当前会话 id / cwd（模块级 store，viewer 组件拼 URL 用）。 */
     const ddffStore = {
@@ -815,36 +849,53 @@ window.__ModuleLoader__.load({
       const [openError, setOpenError] = react.useState(false);
       const openErrorTimer = react.useRef(null);
       const [openPending, setOpenPending] = react.useState(false);
-      // 目录树隐藏状态：localStorage 持久化（关闭工作台再打开时保持上次选择）。
-      const [treeCollapsed, setTreeCollapsed] = react.useState(() => {
-        try {
-          return localStorage.getItem(TREE_COLLAPSED_KEY) === "1";
-        } catch {
-          return false;
-        }
-      });
+      // 目录树隐藏状态 + 目录树宽度 + 代码自动换行：host 端 prefs 持久化
+      // （后端端口每次启动变化，localStorage 跨重启失效；host 端文档
+      // 原子写入，与工作台布局同文件）。
+      const [treeCollapsed, setTreeCollapsed] = react.useState(false);
+      const [wrapMode, setWrapMode] = react.useState(false);
+      // 挂载时应用已保存偏好（异步：先默认值渲染，到达后收敛）。
       react.useEffect(() => {
-        try {
-          localStorage.setItem(TREE_COLLAPSED_KEY, treeCollapsed ? "1" : "0");
-        } catch {
-          // localStorage 不可用时仅失去持久化，不影响使用。
+        let current = true;
+        loadFilePrefs().then((prefs) => {
+          if (current) {
+            if (typeof prefs[PREF_TREE_COLLAPSED] === "boolean") {
+              setTreeCollapsed(prefs[PREF_TREE_COLLAPSED]);
+            }
+            if (typeof prefs[PREF_WRAP] === "boolean") {
+              setWrapMode(prefs[PREF_WRAP]);
+            }
+          }
+        });
+        return () => {
+          current = false;
+        };
+      }, []);
+      // 偏好变更 → 防抖写回（初始加载应用旧值不触发，值与 state 相同）。
+      const prefsTimer = react.useRef(null);
+      const schedulePrefSave = (patch) => {
+        if (prefsTimer.current !== null) {
+          clearTimeout(prefsTimer.current);
         }
+        prefsTimer.current = window.setTimeout(
+          () => saveFilePrefs(patch),
+          ddffPrefSaveDebounceMs,
+        );
+      };
+      react.useEffect(() => {
+        schedulePrefSave({ [PREF_TREE_COLLAPSED]: treeCollapsed });
       }, [treeCollapsed]);
-      // 代码预览自动换行：长行折行显示（localStorage 持久化）。
-      const [wrapMode, setWrapMode] = react.useState(() => {
-        try {
-          return localStorage.getItem(WRAP_KEY) === "1";
-        } catch {
-          return false;
-        }
-      });
       react.useEffect(() => {
-        try {
-          localStorage.setItem(WRAP_KEY, wrapMode ? "1" : "0");
-        } catch {
-          // localStorage 不可用时仅失去持久化，不影响使用。
-        }
+        schedulePrefSave({ [PREF_WRAP]: wrapMode });
       }, [wrapMode]);
+      react.useEffect(
+        () => () => {
+          if (prefsTimer.current !== null) {
+            clearTimeout(prefsTimer.current);
+          }
+        },
+        [],
+      );
 
       // 会话 / cwd 变化 → 重置树与文件页签，并自动加载根目录内容
       // （根目录行不显示，直接从 cwd 的内容开始展示）。
@@ -925,7 +976,8 @@ window.__ModuleLoader__.load({
         }
       };
 
-      // 目录树宽度（px，可拖拽调整）：默认窄（140px），范围 100–280。
+      // 目录树宽度（px，可拖拽调整）：默认窄（140px），范围 100–280，
+      // host 端 prefs 持久化。
       const [treeWidth, setTreeWidth] = react.useState(140);
       const treeDragRef = react.useRef(null);
       const onTreeHandleDown = (event) => {
@@ -956,6 +1008,27 @@ window.__ModuleLoader__.load({
       };
       const treeWidthRef = react.useRef(treeWidth);
       treeWidthRef.current = treeWidth;
+      // 挂载时恢复已保存的树宽度；变更防抖写回。
+      react.useEffect(() => {
+        let current = true;
+        loadFilePrefs().then((prefs) => {
+          if (
+            current &&
+            typeof prefs[PREF_TREE_WIDTH] === "number" &&
+            Number.isFinite(prefs[PREF_TREE_WIDTH])
+          ) {
+            setTreeWidth(
+              Math.min(280, Math.max(100, Math.round(prefs[PREF_TREE_WIDTH]))),
+            );
+          }
+        });
+        return () => {
+          current = false;
+        };
+      }, []);
+      react.useEffect(() => {
+        schedulePrefSave({ [PREF_TREE_WIDTH]: treeWidth });
+      }, [treeWidth]);
 
       const cwd = sessionSnap.cwd;
       const activeFile =

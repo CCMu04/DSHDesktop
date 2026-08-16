@@ -1,7 +1,8 @@
 /**
  * Smoke test for the dsh-desktop-workbench host half: boots apply() against a
- * stub cordis ctx and exercises the framework switch config API plus the
- * per-session layout persistence API.
+ * stub cordis ctx and exercises the framework switch config API, the
+ * per-session layout persistence API (merge semantics) and the global prefs
+ * API (files/git plugin preferences).
  */
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -33,11 +34,13 @@ const ctx = {
 }
 
 apply(ctx, {})
-if (routes.length !== 2) throw new Error(`expected 2 routes, got ${routes.length}`)
+if (routes.length !== 3) throw new Error(`expected 3 routes, got ${routes.length}`)
 const configRoute = routes.find((r) => r.path === '/api/desktop-workbench/config')
 const layoutRoute = routes.find((r) => r.path === '/api/desktop-workbench/layout')
+const prefsRoute = routes.find((r) => r.path === '/api/desktop-workbench/prefs')
 if (!configRoute) throw new Error('config route missing')
 if (!layoutRoute) throw new Error('layout route missing')
+if (!prefsRoute) throw new Error('prefs route missing')
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://dsh.invalid')
@@ -104,6 +107,35 @@ if (r.status !== 200 || r.body.layout.activeTabId !== 'files') {
   throw new Error(`GET layout after POST wrong: ${JSON.stringify(r)}`)
 }
 
+// Merge semantics: a feature plugin POSTs only its own field (repo) and the
+// frame fields survive; null values clear fields.
+r = await postJson('/api/desktop-workbench/layout', {
+  session: 's1',
+  layout: { repo: 'sub/repo' },
+})
+if (r.status !== 200 || r.body.layout.repo !== 'sub/repo') {
+  throw new Error(`repo merge failed: ${JSON.stringify(r)}`)
+}
+r = await getJson('/api/desktop-workbench/layout?session=s1')
+if (r.body.layout.open !== false || r.body.layout.width !== 500 || r.body.layout.activeTabId !== 'files') {
+  throw new Error(`merge clobbered frame fields: ${JSON.stringify(r)}`)
+}
+if (r.body.layout.repo !== 'sub/repo') throw new Error(`repo lost after merge: ${JSON.stringify(r)}`)
+
+// Null clears a field (workbench resets activeTabId/file on session switch).
+r = await postJson('/api/desktop-workbench/layout', {
+  session: 's1',
+  layout: { activeTabId: null, file: null },
+})
+if (r.status !== 200) throw new Error(`null-clear POST failed: ${JSON.stringify(r)}`)
+r = await getJson('/api/desktop-workbench/layout?session=s1')
+if (r.body.layout.activeTabId !== null || r.body.layout.file !== null) {
+  throw new Error(`null clear did not clear: ${JSON.stringify(r)}`)
+}
+if (r.body.layout.repo !== 'sub/repo' || r.body.layout.width !== 500) {
+  throw new Error(`null clear clobbered other fields: ${JSON.stringify(r)}`)
+}
+
 // Layout narrowing: width clamped, unknown fields dropped, file preserved
 r = await postJson('/api/desktop-workbench/layout', {
   session: 's2',
@@ -129,6 +161,49 @@ r = await postJson('/api/desktop-workbench/layout', {
 })
 if (r.status !== 400) throw new Error(`oversized layout should 400, got ${r.status}`)
 
+// --- prefs API --------------------------------------------------------------
+// GET unknown prefs: empty object
+r = await getJson('/api/desktop-workbench/prefs')
+if (r.status !== 200 || typeof r.body.prefs !== 'object') {
+  throw new Error(`GET prefs initial wrong: ${JSON.stringify(r)}`)
+}
+
+// POST persists whitelisted prefs
+r = await postJson('/api/desktop-workbench/prefs', {
+  prefs: { 'files.treeCollapsed': true, 'files.treeWidth': 200, junk: 'x' },
+})
+if (r.status !== 200 || r.body.prefs['files.treeCollapsed'] !== true) {
+  throw new Error(`POST prefs failed: ${JSON.stringify(r)}`)
+}
+if ('junk' in r.body.prefs) throw new Error(`prefs unknown key leaked: ${JSON.stringify(r)}`)
+
+// Values clamped, booleans kept, numbers rounded
+r = await postJson('/api/desktop-workbench/prefs', {
+  prefs: { 'files.treeWidth': 9999, 'git.listWidth': 100.6, 'git.historyHeight': -5 },
+})
+if (r.body.prefs['files.treeWidth'] !== 280) throw new Error(`treeWidth clamp wrong: ${JSON.stringify(r)}`)
+if (r.body.prefs['git.listWidth'] !== 140) throw new Error(`listWidth clamp wrong: ${JSON.stringify(r)}`)
+if (r.body.prefs['git.historyHeight'] !== 64) throw new Error(`historyHeight clamp wrong: ${JSON.stringify(r)}`)
+
+// Non-boolean for a boolean key is dropped entirely
+r = await postJson('/api/desktop-workbench/prefs', { prefs: { 'files.treeCollapsed': 'yes' } })
+if (r.status !== 400) throw new Error(`all-invalid prefs should 400, got ${r.status}`)
+
+// GET reflects merged store
+r = await getJson('/api/desktop-workbench/prefs')
+if (r.body.prefs['files.treeCollapsed'] !== true || r.body.prefs['git.listWidth'] !== 140) {
+  throw new Error(`GET prefs after POST wrong: ${JSON.stringify(r)}`)
+}
+
+// POST rejects missing prefs body
+r = await postJson('/api/desktop-workbench/prefs', {})
+if (r.status !== 400) throw new Error(`missing prefs should 400, got ${r.status}`)
+
+// Prefs do not clobber layouts / switch (shared document)
+file = JSON.parse(readFileSync(join(home, 'desktop-workbench.json'), 'utf8'))
+if (typeof file.layouts?.s1 !== 'object') throw new Error(`layouts lost after prefs POST: ${JSON.stringify(file)}`)
+if (typeof file.prefs !== 'object') throw new Error(`prefs missing in store: ${JSON.stringify(file)}`)
+
 // Config POST does not clobber layouts (shared document)
 await postJson('/api/desktop-workbench/config', { enabled: true })
 file = JSON.parse(readFileSync(join(home, 'desktop-workbench.json'), 'utf8'))
@@ -138,6 +213,8 @@ if (typeof file.layouts?.s1 !== 'object') throw new Error(`layouts lost after co
 // Method not allowed
 const putRes = await fetch(base + '/api/desktop-workbench/config', { method: 'PUT' })
 if (putRes.status !== 405) throw new Error(`PUT should 405, got ${putRes.status}`)
+const putPrefs = await fetch(base + '/api/desktop-workbench/prefs', { method: 'PUT' })
+if (putPrefs.status !== 405) throw new Error(`prefs PUT should 405, got ${putPrefs.status}`)
 
 server.close()
 await once(server, 'close')
