@@ -601,173 +601,189 @@ window.__ModuleLoader__.load({
       return (value / (1024 * 1024 * 1024)).toFixed(2) + " GB";
     }
 
+    //#region 更新弹窗（原生 DOM 实现）
     /**
-     * 更新弹窗（标准更新流程）：
+     * 更新弹窗（标准更新流程），纯原生 DOM 实现：
      *   - 发现新版本：立即更新 / 稍后 + 「下次不再自动提醒」勾选（安装版）；
      *   - 下载中：进度条 + 已下载/总大小；
      *   - 已下载：立即重启安装 / 稍后（退出时自动安装）。
      * 便携版无 electron-updater：动作退化为「前往下载」（浏览器打开安装包直链）。
-     * 弹窗由 apply() 用独立的 React root 挂到 body（z-index 2000），
-     * 不占用任何槽位、不受侧栏布局/槽位错误边界影响，任何页面都可见可点。
+     *
+     * 不用 React 渲染弹窗：独立 React root 的事件委托在本环境不可用
+     * （原生探针证实点击落在容器上但不触发任何 React 处理器）。
+     * 原生 DOM + 原生事件监听与 toast/托盘同机制，可靠可点。
      */
-    function UpdateDialogHost({ t }) {
-      const state = useUpdateState();
-      const [remindOff, setRemindOff] = react.useState(false);
-      // 渲染诊断：每次渲染都记录（弹窗出现但点击无响应时区分渲染/事件问题）。
-      dduDbg(
-        "host render: dialogOpen=" +
-          state.dialogOpen +
-          " phase=" +
-          state.phase +
-          " remindOff=" +
-          remindOff,
-      );
-      if (state.dialogOpen === false) return null;
+    /** 弹窗 DOM 引用（mount 时创建，按状态更新）。 */
+    let dduNativeDialog = null;
+
+    /** 创建原生按钮。 */
+    function makeDialogButton(label, primary, onClick) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      button.style.cssText =
+        "height:36px;padding:0 16px;border-radius:12px;font-size:14px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-family:inherit;" +
+        (primary
+          ? "background:var(--dsw-alias-button-elevated-fill);border:1px solid transparent;color:var(--dsw-alias-label-primary);"
+          : "background:transparent;border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);");
+      button.addEventListener("click", onClick);
+      return button;
+    }
+
+    /** 按当前状态重绘弹窗内容。 */
+    function renderNativeDialog(t) {
+      if (dduNativeDialog === null) return;
+      const state = getUpdateState();
+      const { overlay, titleEl, descEl, bodyEl, footerEl } = dduNativeDialog;
+      if (state.dialogOpen === false) {
+        overlay.style.display = "none";
+        return;
+      }
+      overlay.style.display = "flex";
       const latest = state.latest;
       const tag = state.tag ?? (latest ? latest.tag_name : null);
       const isInstaller = dduInstallKind === "installer";
       const downloading = state.phase === "downloading";
       const downloaded = state.phase === "downloaded";
-      const title = downloaded
-        ? (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
-            children: [
-              t("updates.downloadedTitle"),
-              tag === null ? "" : " " + tag,
-            ],
-          })
-        : (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
-            children: [
-              t("updates.updateAvailable"),
-              tag === null ? "" : " " + tag,
-            ],
-          });
-      const description = [
-        latest?.published_at === undefined || latest?.published_at === null
-          ? ""
-          : String(latest.published_at) === ""
-            ? ""
-            : t("updates.releasedAt") + " " + String(latest.published_at).slice(0, 10),
-        latest?.body === undefined || latest?.body === null
-          ? ""
-          : String(latest.body) === ""
-            ? ""
-            : t("updates.releaseNotes"),
-      ]
-        .filter(Boolean)
-        .join(" · ");
-      const downloadProgress =
-        downloading &&
-        (0, react_jsx_runtime.jsxs)("div", {
-          className: "dduiU_dlBlock",
-          children: [
-            (0, react_jsx_runtime.jsx)("div", {
-              className: "dduiU_progress",
-              children: (0, react_jsx_runtime.jsx)("div", {
-                className: "dduiU_progressBar",
-                style: { width: Math.min(100, Math.max(0, state.percent)) + "%" },
-              }),
-            }),
-            (0, react_jsx_runtime.jsxs)("div", {
-              className: "dduiU_progressText",
-              children: [
-                Math.round(state.percent) + "%",
-                " · ",
-                formatBytes(state.transferred),
-                " / ",
-                formatBytes(state.total),
-              ],
-            }),
-          ],
-        });
-      const remindRow =
-        isInstaller && !downloading && !downloaded
-          ? (0, react_jsx_runtime.jsxs)("label", {
-              className: "dduiU_remindRow",
-              children: [
-                (0, react_jsx_runtime.jsx)("input", {
-                  type: "checkbox",
-                  checked: remindOff,
-                  onChange: (event) => {
-                    setRemindOff(event.target.checked);
-                    if (event.target.checked) dismissUpdateReminder();
-                  },
-                }),
-                (0, react_jsx_runtime.jsx)("span", {
-                  children: t("updates.dismissReminder"),
-                }),
-              ],
-            })
-          : null;
-      let footer = null;
-      if (downloading) {
-        footer = null;
-      } else if (downloaded) {
-        footer = (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
-          children: [
-            (0, react_jsx_runtime.jsx)(
-              _deepseek_ai_dsh_client_ui_primitives.Button,
-              {
-                variant: "outline",
-                onClick: closeUpdateDialog,
-                children: t("updates.notNow"),
-              },
-            ),
-            (0, react_jsx_runtime.jsx)(
-              _deepseek_ai_dsh_client_ui_primitives.Button,
-              {
-                variant: "primary",
-                onClick: quitAndInstallUpdate,
-                children: t("updates.restartInstall"),
-              },
-            ),
-          ],
-        });
-      } else {
-        footer = (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
-          children: [
-            (0, react_jsx_runtime.jsx)(
-              _deepseek_ai_dsh_client_ui_primitives.Button,
-              {
-                variant: "outline",
-                onClick: closeUpdateDialog,
-                children: t("updates.notNow"),
-              },
-            ),
-            (0, react_jsx_runtime.jsx)(
-              _deepseek_ai_dsh_client_ui_primitives.Button,
-              {
-                variant: "primary",
-                onClick: startUpdateDownload,
-                children: isInstaller
-                  ? t("updates.installNow")
-                  : t("updates.download"),
-              },
-            ),
-          ],
-        });
+      titleEl.textContent =
+        (downloaded
+          ? t("updates.downloadedTitle")
+          : t("updates.updateAvailable")) +
+        (tag === null ? "" : " " + tag);
+      const descParts = [];
+      if (latest?.published_at) {
+        descParts.push(
+          t("updates.releasedAt") + " " + String(latest.published_at).slice(0, 10),
+        );
       }
-      // 不 createPortal：独立 root 的容器已挂在 body，Modal 直接渲染在容器内，
-      // 保证点击事件冒泡路径经过 root 容器（React 18 事件委托挂在容器上，
-      // portal 到容器外的事件永远不会被该 root 收到）。
-      return (0, react_jsx_runtime.jsx)("div", {
-        // 高于官方设置抽屉（z-index 1000）的全局层，保证弹窗可点。
-        style: { position: "fixed", inset: 0, zIndex: 2000 },
-        children: (0, react_jsx_runtime.jsx)(
-          _deepseek_ai_dsh_client_ui_primitives.Modal,
-          {
-            open: true,
-            onClose: closeUpdateDialog,
-            title,
-            description,
-            closeLabel: t("updates.notNow"),
-            children: (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
-              children: [downloadProgress, remindRow],
-            }),
-            footer,
-          },
-        ),
-      });
+      if (latest?.body) descParts.push(t("updates.releaseNotes"));
+      descEl.textContent = descParts.join(" · ");
+      descEl.style.display = descParts.length === 0 ? "none" : "";
+      bodyEl.replaceChildren();
+      if (downloading) {
+        const block = document.createElement("div");
+        block.style.cssText = "display:flex;flex-direction:column;gap:6px;";
+        const bar = document.createElement("div");
+        bar.style.cssText =
+          "height:6px;border-radius:3px;background:var(--dsw-alias-bg-layer-2);overflow:hidden;";
+        const fill = document.createElement("div");
+        fill.style.cssText =
+          "height:100%;width:" +
+          Math.min(100, Math.max(0, state.percent)) +
+          "%;background:var(--dsw-alias-state-info-primary,#3b82f6);border-radius:3px;transition:width .15s ease-out;";
+        bar.appendChild(fill);
+        const text = document.createElement("div");
+        text.style.cssText =
+          "color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5;";
+        text.textContent =
+          Math.round(state.percent) +
+          "% · " +
+          formatBytes(state.transferred) +
+          " / " +
+          formatBytes(state.total);
+        block.appendChild(bar);
+        block.appendChild(text);
+        bodyEl.appendChild(block);
+      } else if (isInstaller && !downloaded) {
+        const label = document.createElement("label");
+        label.style.cssText =
+          "display:flex;align-items:center;gap:8px;margin-top:8px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.5;cursor:pointer;";
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.style.cssText =
+          "accent-color:var(--dsw-alias-state-info-primary,#3b82f6);width:14px;height:14px;margin:0;cursor:pointer;";
+        input.addEventListener("change", () => {
+          if (input.checked) dismissUpdateReminder();
+        });
+        const span = document.createElement("span");
+        span.textContent = t("updates.dismissReminder");
+        label.appendChild(input);
+        label.appendChild(span);
+        bodyEl.appendChild(label);
+      }
+      footerEl.replaceChildren();
+      if (!downloading) {
+        if (downloaded) {
+          footerEl.appendChild(
+            makeDialogButton(t("updates.notNow"), false, closeUpdateDialog),
+          );
+          footerEl.appendChild(
+            makeDialogButton(
+              t("updates.restartInstall"),
+              true,
+              quitAndInstallUpdate,
+            ),
+          );
+        } else {
+          footerEl.appendChild(
+            makeDialogButton(t("updates.notNow"), false, closeUpdateDialog),
+          );
+          footerEl.appendChild(
+            makeDialogButton(
+              isInstaller ? t("updates.installNow") : t("updates.download"),
+              true,
+              startUpdateDownload,
+            ),
+          );
+        }
+      }
     }
+
+    /** 挂载原生弹窗宿主（订阅状态，变化即重绘）。 */
+    function mountNativeDialog(t) {
+      if (typeof document === "undefined") return () => {};
+      const overlay = document.createElement("div");
+      overlay.style.cssText =
+        "position:fixed;inset:0;z-index:3000;display:none;align-items:center;justify-content:center;padding:24px;";
+      const mask = document.createElement("div");
+      mask.style.cssText =
+        "position:absolute;inset:0;background:rgba(0,0,0,.24);backdrop-filter:blur(10px);";
+      mask.addEventListener("click", closeUpdateDialog);
+      const panel = document.createElement("div");
+      panel.style.cssText =
+        "position:relative;z-index:1;display:flex;flex-direction:column;gap:16px;width:min(380px,100%);max-height:calc(100vh - 48px);overflow:auto;box-sizing:border-box;padding:22px 24px 24px;border-radius:24px;border:1px solid var(--dsw-alias-border-inverted);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-shadow-lv3);color:var(--dsw-alias-label-primary);font-size:14px;";
+      const header = document.createElement("div");
+      header.style.cssText =
+        "display:flex;align-items:center;justify-content:space-between;gap:8px;";
+      const titleEl = document.createElement("h2");
+      titleEl.style.cssText =
+        "margin:0;font-size:16px;line-height:24px;font-weight:500;color:var(--dsw-alias-label-primary);";
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.textContent = "×";
+      closeBtn.style.cssText =
+        "flex:none;width:28px;height:28px;border:none;border-radius:8px;background:transparent;cursor:pointer;color:var(--dsw-alias-label-secondary);font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center;";
+      closeBtn.addEventListener("click", closeUpdateDialog);
+      header.appendChild(titleEl);
+      header.appendChild(closeBtn);
+      const descEl = document.createElement("p");
+      descEl.style.cssText =
+        "margin:0;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);word-break:break-word;";
+      const bodyEl = document.createElement("div");
+      bodyEl.style.cssText = "display:flex;flex-direction:column;min-width:0;";
+      const footerEl = document.createElement("div");
+      footerEl.style.cssText =
+        "display:flex;align-items:center;justify-content:flex-end;gap:8px;";
+      panel.appendChild(header);
+      panel.appendChild(descEl);
+      panel.appendChild(bodyEl);
+      panel.appendChild(footerEl);
+      overlay.appendChild(mask);
+      overlay.appendChild(panel);
+      document.body.appendChild(overlay);
+      dduNativeDialog = { overlay, titleEl, descEl, bodyEl, footerEl };
+      renderNativeDialog(t);
+      const unsubscribe = subscribeUpdateState(() => renderNativeDialog(t));
+      dduDbg("native dialog host: mounted");
+      return () => {
+        unsubscribe();
+        if (dduNativeDialog !== null && dduNativeDialog.overlay === overlay) {
+          dduNativeDialog = null;
+        }
+        overlay.remove();
+      };
+    }
+    //#endregion
 
     /**
      * 侧边栏底部「更新」按钮（sidebar.footer.action）：
@@ -919,76 +935,9 @@ window.__ModuleLoader__.load({
         if (config.enabled) {
           install(() => installUpdatesCss());
           install(() => installSidebarCss());
-          // 更新弹窗：独立 React root 挂到 body（不占槽位，全局可见可点）。
-          install(() => {
-            try {
-              // createRoot 在 react-dom/client 子入口（官方 UI 引导即用它）；
-              // 主入口 seed 不保证有，逐级回退。
-              let createRootFn = null;
-              try {
-                const clientEntry = require("react-dom/client");
-                if (
-                  clientEntry !== null &&
-                  typeof clientEntry === "object" &&
-                  typeof clientEntry.createRoot === "function"
-                ) {
-                  createRootFn = clientEntry.createRoot;
-                } else {
-                  dduDbg(
-                    "dialog host: react-dom/client.createRoot missing, keys=" +
-                      Object.keys(clientEntry ?? {}).join(","),
-                  );
-                }
-              } catch (error) {
-                dduDbg("dialog host: require react-dom/client failed: " + String(error));
-              }
-              if (
-                createRootFn === null &&
-                react_dom !== null &&
-                typeof react_dom.createRoot === "function"
-              ) {
-                createRootFn = react_dom.createRoot;
-              }
-              if (createRootFn === null || typeof document === "undefined") {
-                dduDbg("dialog host: no createRoot available, skipped");
-                return () => {};
-              }
-              const container = document.createElement("div");
-              document.body.appendChild(container);
-              // 原生点击诊断（绕过 React 委托）：点击是否到达页面 DOM。
-              const clickProbe = (event) => {
-                const el = event?.target;
-                dduDbg(
-                  "native click: " +
-                    (el && el.tagName ? el.tagName : String(el)) +
-                    " cls=" +
-                    (el && el.className && typeof el.className === "string"
-                      ? el.className.slice(0, 80)
-                      : ""),
-                );
-              };
-              container.addEventListener("click", clickProbe, true);
-              const root = createRootFn(container);
-              root.render((0, react_jsx_runtime.jsx)(UpdateDialogHost, { t }));
-              dduDbg("dialog host: mounted");
-              return () => {
-                try {
-                  container.removeEventListener("click", clickProbe, true);
-                } catch {}
-                try {
-                  root.unmount();
-                } catch {}
-                container.remove();
-              };
-            } catch (error) {
-              dduDbg("dialog host: mount failed: " + String(error));
-              console.error(
-                "[dsh-desktop-updates] dialog host mount failed:",
-                error,
-              );
-              return () => {};
-            }
-          });
+          // 更新弹窗：原生 DOM 宿主（独立 React root 的事件委托在本环境
+          // 不可用，原生实现与 toast 同机制，全局可见可点）。
+          install(() => mountNativeDialog(t));
           install(() =>
             ctx.slots.inject("settings.section", () =>
               ctx.slots.register(
