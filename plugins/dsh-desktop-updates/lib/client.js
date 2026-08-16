@@ -74,12 +74,12 @@ window.__ModuleLoader__.load({
       ".dduiU_section{width:100%;max-width:760px;color:var(--dsw-alias-label-primary);flex-direction:column;gap:16px;display:flex}.dduiU_block{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;flex-direction:column;gap:12px;padding:14px 16px;display:flex}.dduiU_row{align-items:center;justify-content:space-between;gap:12px;display:flex}.dduiU_rowLabel{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}.dduiU_rowValue{color:var(--dsw-alias-label-primary);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.5}.dduiU_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}.dduiU_dlBlock{flex-direction:column;gap:6px;display:flex}.dduiU_progress{height:6px;background:var(--dsw-alias-bg-layer-2);border-radius:3px;overflow:hidden}.dduiU_progressBar{height:100%;background:var(--dsw-alias-state-info-primary,#3b82f6);border-radius:3px;transition:width .15s ease-out}.dduiU_progressText{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5}.dduiU_remindRow{align-items:center;gap:8px;margin-top:8px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.5;cursor:pointer;display:flex}.dduiU_remindRow input{accent-color:var(--dsw-alias-state-info-primary,#3b82f6);width:14px;height:14px;margin:0;cursor:pointer}";
     const updatesTagId = "dsh-desktop-updates/UpdatesSection.module.css";
     const installUpdatesCss = () => dduInstallCss(updatesCss, updatesTagId);
-    // 侧边栏底部「更新」按钮样式 + 与设置按钮同排的布局覆盖。
-    // 官方 footer 区默认纵向排布（footerActions 在 settingsArea 上方、各占满整行），
-    // 展开态改为横向同排：设置按钮 flex:1 让出空间，更新按钮固定宽度；
-    // 收起态（root 带 collapsed 类）保持官方原布局，更新按钮本身也不渲染。
+    // 侧边栏底部「更新」按钮样式。footer 槽位行高度压为 0，
+    // 按钮悬浮在设置按钮行右侧空白处（设置按钮保持全宽不受影响）；
+    // 收起态（wide=false）组件不渲染，设置按钮图标不受影响。
+    // 若 hashed 类匹配失败，按钮退化为独立一行，设置按钮仍完好。
     const sidebarCss =
-      ".dduiU_sideBtn{height:32px;padding:0 12px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-button-elevated-fill);color:var(--dsw-alias-label-primary);font-size:13px;line-height:1;white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}.dduiU_sideBtn:hover{background:var(--dsw-alias-button-floating-hover)}[class$=\"_root\"]:not([class*=\"_collapsed\"]) [class$=\"_footArea\"]{flex-direction:row;align-items:center;gap:8px}[class$=\"_root\"]:not([class*=\"_collapsed\"]) [class$=\"_settingsArea\"]{flex:1;min-width:0}[class$=\"_root\"]:not([class*=\"_collapsed\"]) [class$=\"_footerActions\"]{flex:none}";
+      ".dduiU_sideBtn{height:32px;padding:0 12px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-button-elevated-fill);color:var(--dsw-alias-label-primary);font-size:13px;line-height:1;white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;position:relative;z-index:2;margin-left:auto;margin-top:5px;margin-right:4px}.dduiU_sideBtn:hover{background:var(--dsw-alias-button-floating-hover)}[class$=\"_footerActions\"]{height:0;overflow:visible}";
     const sidebarTagId = "dsh-desktop-updates/SidebarUpdateAction.module.css";
     const installSidebarCss = () => dduInstallCss(sidebarCss, sidebarTagId);
     //#endregion
@@ -225,14 +225,19 @@ window.__ModuleLoader__.load({
         typeof latest?.tag_name === "string" &&
         currentVersion !== null &&
         compareVersions(latest.tag_name, currentVersion) > 0;
+      const knownTag = getUpdateState().tag;
       if (newer) {
         setUpdateState({ available: true, tag: latest.tag_name, latest });
       } else if (
         latest !== null &&
         typeof latest === "object" &&
-        typeof latest?.tag_name === "string"
+        typeof latest?.tag_name === "string" &&
+        // 仅当取到的版本不比已知的新版本旧时才清除按钮状态：
+        // 主进程事件带来的版本（tag）比过期缓存更新时保留事件状态，
+        // 避免刷新/事件后按钮被缓存里的旧版本误清。
+        (knownTag === null || compareVersions(knownTag, latest.tag_name) < 0)
       ) {
-        // 查询成功但无新版本：清除按钮状态。
+        // 查询成功且无新版本（或已同步到最新）：清除按钮状态。
         setUpdateState({ available: false, tag: null, latest: null });
       }
       // 查询失败（latest 为 { error } 或 null）：保留现有状态，
@@ -263,6 +268,13 @@ window.__ModuleLoader__.load({
         });
       } else if (detail.type === "update-downloaded") {
         setUpdateState({ phase: "downloaded", dialogOpen: true });
+      } else if (detail.type === "update-pending") {
+        // 页面重新加载后主进程补发的轻量通知：恢复按钮状态，但不自动弹窗。
+        setUpdateState({
+          available: true,
+          tag: typeof detail.version === "string" ? detail.version : null,
+        });
+        void refreshUpdateState();
       }
     }
     //#endregion
@@ -558,9 +570,10 @@ window.__ModuleLoader__.load({
      *   - 下载中：进度条 + 已下载/总大小；
      *   - 已下载：立即重启安装 / 稍后（退出时自动安装）。
      * 便携版无 electron-updater：动作退化为「前往下载」（浏览器打开安装包直链）。
-     * 弹窗挂在侧栏 footer 组件下（Modal 为 fixed 遮罩，任何页面都可见）。
+     * 弹窗由 apply() 用独立的 React root 挂到 body（z-index 2000），
+     * 不占用任何槽位、不受侧栏布局/槽位错误边界影响，任何页面都可见可点。
      */
-    function UpdateDialog({ t }) {
+    function UpdateDialogHost({ t }) {
       const state = useUpdateState();
       const [remindOff, setRemindOff] = react.useState(false);
       if (state.dialogOpen === false) return null;
@@ -583,11 +596,11 @@ window.__ModuleLoader__.load({
             ],
           });
       const description = [
-        latest?.publishedAt === undefined || latest?.publishedAt === null
+        latest?.published_at === undefined || latest?.published_at === null
           ? ""
-          : String(latest.publishedAt) === ""
+          : String(latest.published_at) === ""
             ? ""
-            : t("updates.releasedAt") + " " + String(latest.publishedAt).slice(0, 10),
+            : t("updates.releasedAt") + " " + String(latest.published_at).slice(0, 10),
         latest?.body === undefined || latest?.body === null
           ? ""
           : String(latest.body) === ""
@@ -687,44 +700,49 @@ window.__ModuleLoader__.load({
           ],
         });
       }
-      return (0, react_jsx_runtime.jsx)(
-        _deepseek_ai_dsh_client_ui_primitives.Modal,
-        {
-          open: true,
-          onClose: closeUpdateDialog,
-          title,
-          description,
-          closeLabel: t("updates.notNow"),
-          children: (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
-            children: [downloadProgress, remindRow],
-          }),
-          footer,
-        },
+      return react_dom.createPortal(
+        (0, react_jsx_runtime.jsx)("div", {
+          // 高于官方设置抽屉（z-index 1000）的全局层，保证弹窗可点。
+          style: { position: "fixed", inset: 0, zIndex: 2000 },
+          children: (0, react_jsx_runtime.jsx)(
+            _deepseek_ai_dsh_client_ui_primitives.Modal,
+            {
+              open: true,
+              onClose: closeUpdateDialog,
+              title,
+              description,
+              closeLabel: t("updates.notNow"),
+              children: (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
+                children: [downloadProgress, remindRow],
+              }),
+              footer,
+            },
+          ),
+        }),
+        document.body,
       );
     }
 
     /**
-     * 侧边栏底部「更新」按钮（sidebar.footer.action，设置按钮旁边）：
+     * 侧边栏底部「更新」按钮（sidebar.footer.action）：
      *   - 仅展开态显示（wide），收起侧栏不显示、不影响设置按钮图标；
      *   - 仅存在新版本时显示；
      *   - 点击打开更新弹窗。
+     * 布局：footer 槽位行高度压为 0，按钮悬浮在设置按钮行右侧空白处
+     * （设置按钮保持全宽，右侧本来无内容；匹配失败时退化为独立一行，不影响设置）。
      */
     function SidebarUpdateAction({ wide, t }) {
       const state = useUpdateState();
-      const showButton = wide && state.available;
-      return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
-        children: [
-          showButton
-            ? (0, react_jsx_runtime.jsx)("button", {
-                type: "button",
-                className: "dduiU_sideBtn",
-                title: state.tag === null ? t("updates.updateAvailable") : t("updates.updateAvailable") + " " + state.tag,
-                onClick: openUpdateDialog,
-                children: t("updates.sidebarUpdate"),
-              })
-            : null,
-          (0, react_jsx_runtime.jsx)(UpdateDialog, { t }),
-        ],
+      if (!wide || !state.available) return null;
+      return (0, react_jsx_runtime.jsx)("button", {
+        type: "button",
+        className: "dduiU_sideBtn",
+        title:
+          state.tag === null
+            ? t("updates.updateAvailable")
+            : t("updates.updateAvailable") + " " + state.tag,
+        onClick: openUpdateDialog,
+        children: t("updates.sidebarUpdate"),
       });
     }
     //#endregion
@@ -855,6 +873,23 @@ window.__ModuleLoader__.load({
         if (config.enabled) {
           install(() => installUpdatesCss());
           install(() => installSidebarCss());
+          // 更新弹窗：独立 React root 挂到 body（不占槽位，全局可见可点）。
+          install(() => {
+            if (
+              typeof document === "undefined" ||
+              typeof react_dom.createRoot !== "function"
+            ) {
+              return () => {};
+            }
+            const container = document.createElement("div");
+            document.body.appendChild(container);
+            const root = react_dom.createRoot(container);
+            root.render((0, react_jsx_runtime.jsx)(UpdateDialogHost, { t }));
+            return () => {
+              root.unmount();
+              container.remove();
+            };
+          });
           install(() =>
             ctx.slots.inject("settings.section", () =>
               ctx.slots.register(

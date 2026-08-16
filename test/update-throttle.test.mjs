@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
+import test, { after } from 'node:test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { AUTO_CHECK_INTERVAL_MS, shouldAutoCheck } from '../update-throttle.mjs'
+
+// 隔离真实用户数据：默认参数路径会读 $DSH_HOME/desktop-auto-update.json，
+// 用户机器上存在真实文件时会让「无记录」断言失败。
+const home = mkdtempSync(join(tmpdir(), 'dsh-update-throttle-test-'))
+process.env.DSH_HOME = home
+after(() => rmSync(home, { recursive: true, force: true }))
 
 test('shouldAutoCheck returns true without any record', () => {
   assert.equal(shouldAutoCheck({ lastCheckedAt: null }), true)

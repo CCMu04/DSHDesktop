@@ -631,6 +631,18 @@ function configureNavigation(window) {
         )
         .catch(() => {})
     }
+    // 页面重新加载后（插件状态已重置）恢复「更新」按钮：
+    // 只要还有待更新的版本且未被「不再提醒」，就补发轻量通知（不自动弹窗）。
+    if (
+      pendingUpdateVersion !== null &&
+      readDismissedVersion() !== pendingUpdateVersion
+    ) {
+      void window.webContents
+        .executeJavaScript(
+          `window.dispatchEvent(new CustomEvent('dsh-desktop-update-event', { detail: ${JSON.stringify({ type: 'update-pending', version: pendingUpdateVersion })} }))`,
+        )
+        .catch(() => {})
+    }
     void window.webContents.executeJavaScript(`
       if (!document.getElementById('dsh-desktop-drag-style')) {
         const dragStyle = document.createElement('style')
