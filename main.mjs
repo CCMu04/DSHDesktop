@@ -97,6 +97,15 @@ let quitting = false
 let recentBackendOutput = ''
 let runtimeDirectory
 
+// 主进程日志流（模块级）：后端 stdout 与主进程自身诊断（自动更新等）
+// 都写入同一文件。此前 logStream 是 startBackend 的局部变量，主进程
+// 诊断无法落盘，排查只能靠内存缓冲。
+app.setAppLogsPath()
+const logStream = createWriteStream(
+  path.join(app.getPath('logs'), 'backend.log'),
+  { flags: 'a' },
+)
+
 async function setLoadingStatus(message) {
   if (!mainWindow || mainWindow.isDestroyed()) return
   try {
@@ -379,9 +388,6 @@ async function prepareBundledPlugins(context) {
 }
 
 function startBackend(port, context) {
-  app.setAppLogsPath()
-  const logStream = createWriteStream(path.join(app.getPath('logs'), 'backend.log'), { flags: 'a' })
-
   backendExitCode = null
   // Plain pipes, not a pty: node-pty output events never fire under
   // Electron's runtime, which would leave backend.log permanently silent.
