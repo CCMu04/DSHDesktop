@@ -875,20 +875,47 @@ window.__ModuleLoader__.load({
           install(() => installSidebarCss());
           // 更新弹窗：独立 React root 挂到 body（不占槽位，全局可见可点）。
           install(() => {
-            if (
-              typeof document === "undefined" ||
-              typeof react_dom.createRoot !== "function"
-            ) {
+            try {
+              // createRoot 在 react-dom/client 子入口（官方 UI 引导即用它）；
+              // 主入口 seed 不保证有，逐级回退。
+              let createRootFn = null;
+              try {
+                const clientEntry = require("react-dom/client");
+                if (
+                  clientEntry !== null &&
+                  typeof clientEntry === "object" &&
+                  typeof clientEntry.createRoot === "function"
+                ) {
+                  createRootFn = clientEntry.createRoot;
+                }
+              } catch {}
+              if (
+                createRootFn === null &&
+                react_dom !== null &&
+                typeof react_dom.createRoot === "function"
+              ) {
+                createRootFn = react_dom.createRoot;
+              }
+              if (createRootFn === null || typeof document === "undefined") {
+                return () => {};
+              }
+              const container = document.createElement("div");
+              document.body.appendChild(container);
+              const root = createRootFn(container);
+              root.render((0, react_jsx_runtime.jsx)(UpdateDialogHost, { t }));
+              return () => {
+                try {
+                  root.unmount();
+                } catch {}
+                container.remove();
+              };
+            } catch (error) {
+              console.error(
+                "[dsh-desktop-updates] dialog host mount failed:",
+                error,
+              );
               return () => {};
             }
-            const container = document.createElement("div");
-            document.body.appendChild(container);
-            const root = react_dom.createRoot(container);
-            root.render((0, react_jsx_runtime.jsx)(UpdateDialogHost, { t }));
-            return () => {
-              root.unmount();
-              container.remove();
-            };
           });
           install(() =>
             ctx.slots.inject("settings.section", () =>
