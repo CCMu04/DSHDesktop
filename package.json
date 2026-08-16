@@ -63,6 +63,13 @@
     "productName": "DeepSeek Harness",
     "asar": true,
     "npmRebuild": false,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "CCMu04",
+        "repo": "DSHDesktop"
+      }
+    ],
     "directories": {
       "output": "dist"
     },
