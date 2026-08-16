@@ -194,16 +194,14 @@ window.__ModuleLoader__.load({
         const onKeyDown = (event) => {
           if (event.key === "Escape") hideFloatingMenu();
         };
-        // 只响应视口滚动（window）：菜单是 position:fixed，内部容器滚动
-        // （如 AI 流式输出时消息流自动滚动）不影响它的位置，若监听
-        // document capture 会被任意元素滚动触发——右键菜单在 AI 对话
-        // 期间被持续关掉。
-        const onScroll = () => hideFloatingMenu();
+        // 只保留 Escape 关闭。**不做 scroll 关闭**：菜单是 position:fixed，
+        // 任何滚动都不影响它的位置（平台惯例：桌面应用右键菜单不随滚动
+        // 关闭）；且实测真实滚动事件不会传播到 window/document 的 capture
+        // 监听，只有合成 scroll 事件会触发——该路径只会误伤（如未来官方
+        // 派发合成 scroll 事件时把菜单关掉），没有收益。
         document.addEventListener("keydown", onKeyDown, true);
-        window.addEventListener("scroll", onScroll, true);
         return () => {
           document.removeEventListener("keydown", onKeyDown, true);
-          window.removeEventListener("scroll", onScroll, true);
         };
       }, [menu]);
       if (menu === null) return null;
