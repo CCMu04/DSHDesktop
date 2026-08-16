@@ -105,6 +105,38 @@ window.__ModuleLoader__.load({
     }
     //#endregion
 
+    //#region 自动检查辅助
+    /** 抓取 GitHub Releases 最新版本；失败返回 null。 */
+    function fetchLatestRelease() {
+      return fetch(
+        "https://api.github.com/repos/CCMu04/DSHDesktop/releases/latest",
+        { headers: { accept: "application/vnd.github+json" } },
+      )
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null);
+    }
+    /** 按安装方式挑选下载资产（便携版→portable，安装版→setup，兜底任意 .exe）。 */
+    function pickAsset(assets, installKind) {
+      if (!Array.isArray(assets) || assets.length === 0) return null;
+      const isExe = (a) =>
+        typeof a?.browser_download_url === "string" &&
+        /\.exe$/i.test(a.browser_download_url);
+      const preferred =
+        installKind === "portable"
+          ? /portable/i
+          : installKind === "installer"
+            ? /setup/i
+            : null;
+      if (preferred) {
+        const match = assets.find(
+          (a) => isExe(a) && preferred.test(a.browser_download_url),
+        );
+        if (match) return match;
+      }
+      return assets.find(isExe) ?? null;
+    }
+    //#endregion
+
     //#region 检查更新分区
     /** 设置侧边栏「检查更新」分区：客户端信息 + 检查按钮 + 更新弹窗。 */
     function UpdatesSection({ t }) {
@@ -154,42 +186,37 @@ window.__ModuleLoader__.load({
         if (checking) return;
         setChecking(true);
         // 最新版本走 GitHub Releases（经系统代理）。
-        fetch("https://api.github.com/repos/CCMu04/DSHDesktop/releases/latest", {
-          headers: { accept: "application/vnd.github+json" },
-        })
-          .then((res) =>
-            res.ok
-              ? res.json()
-              : Promise.reject(new Error("github-http-" + res.status)),
-          )
-          .catch(() => null)
-          .then((latest) => {
-            setChecking(false);
-            if (latest === null || typeof latest?.tag_name !== "string") {
-              showToast("error", t("updates.checkFailed"));
-              return;
-            }
-            const currentVersion = info?.currentVersion ?? null;
-            const newer =
-              currentVersion !== null &&
-              compareVersions(latest.tag_name, currentVersion) > 0;
-            if (newer) {
-              setDialog({
-                tag: latest.tag_name,
-                url:
-                  typeof latest.html_url === "string"
-                    ? latest.html_url
-                    : "https://github.com/CCMu04/DSHDesktop/releases",
-                publishedAt:
-                  typeof latest.published_at === "string"
-                    ? latest.published_at
-                    : "",
-                body: typeof latest.body === "string" ? latest.body : "",
-              });
-            } else {
-              showToast("success", t("updates.upToDate"));
-            }
-          });
+        fetchLatestRelease().then((latest) => {
+          setChecking(false);
+          if (latest === null || typeof latest?.tag_name !== "string") {
+            showToast("error", t("updates.checkFailed"));
+            return;
+          }
+          const currentVersion = info?.currentVersion ?? null;
+          const newer =
+            currentVersion !== null &&
+            compareVersions(latest.tag_name, currentVersion) > 0;
+          if (newer) {
+            const asset = pickAsset(latest.assets, info?.installKind ?? null);
+            setDialog({
+              tag: latest.tag_name,
+              url:
+                (typeof asset?.browser_download_url === "string"
+                  ? asset.browser_download_url
+                  : null) ??
+                (typeof latest.html_url === "string"
+                  ? latest.html_url
+                  : "https://github.com/CCMu04/DSHDesktop/releases"),
+              publishedAt:
+                typeof latest.published_at === "string"
+                  ? latest.published_at
+                  : "",
+              body: typeof latest.body === "string" ? latest.body : "",
+            });
+          } else {
+            showToast("success", t("updates.upToDate"));
+          }
+        });
       };
       const goDownload = () => {
         const data = dialog;
@@ -455,6 +482,7 @@ window.__ModuleLoader__.load({
       applyConfig({ ...dduUpdatesDefaultConfig });
       void loadUpdatesConfig().then((config) => {
         applyConfig(config);
+        if (config.enabled) void autoCheckOnLaunch();
       });
     }
     //#endregion
@@ -474,6 +502,53 @@ window.__ModuleLoader__.load({
       tag.textContent = text;
       document.body.appendChild(tag);
       setTimeout(() => tag.remove(), 3200);
+    }
+
+    /** 可点击的更新提示：点击直接打开下载链接，15 秒后自动消失。 */
+    function showUpdateToast(version, url) {
+      const id = "dsh-desktop-updates-toast-" + ++dduToastSeq;
+      const tag = document.createElement("div");
+      tag.id = id;
+      tag.style.cssText =
+        "position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:3000;max-width:min(540px,calc(100vw - 32px));padding:10px 16px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);box-shadow:var(--dsw-shadow-lv2);color:var(--dsw-alias-label-primary);border-radius:10px;font-size:13px;line-height:20px;cursor:pointer;overflow-wrap:anywhere";
+      tag.textContent = "发现新版本 " + version + "，点击下载";
+      tag.addEventListener("click", () => {
+        globalThis.window.open(url, "_blank");
+        tag.remove();
+      });
+      document.body.appendChild(tag);
+      setTimeout(() => tag.remove(), 15000);
+    }
+
+    /** 启动时静默检查更新：有新版本弹出可点击提示，无更新不打扰。 */
+    async function autoCheckOnLaunch() {
+      try {
+        const infoRes = await fetch("/api/desktop-updates/version", {
+          headers: { accept: "application/json" },
+          cache: "no-store",
+        });
+        if (!infoRes.ok) return;
+        const infoBody = await infoRes.json();
+        const currentVersion =
+          typeof infoBody?.currentVersion === "string"
+            ? infoBody.currentVersion
+            : null;
+        if (currentVersion === null) return;
+        const latest = await fetchLatestRelease();
+        if (latest === null || typeof latest?.tag_name !== "string") return;
+        if (compareVersions(latest.tag_name, currentVersion) <= 0) return;
+        const asset = pickAsset(latest.assets, infoBody?.installKind ?? null);
+        const url =
+          (typeof asset?.browser_download_url === "string"
+            ? asset.browser_download_url
+            : null) ??
+          (typeof latest.html_url === "string"
+            ? latest.html_url
+            : "https://github.com/CCMu04/DSHDesktop/releases");
+        showUpdateToast(latest.tag_name, url);
+      } catch {
+        // 启动期静默失败，不打扰用户。
+      }
     }
 
     exports.apply = apply;
