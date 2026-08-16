@@ -78,7 +78,7 @@ window.__ModuleLoader__.load({
       ) === null
     ) {
       const tag = document.createElement("style");
-      tag.dataset.plugin = "dsh-desktop-ui";
+      tag.dataset.plugin = "dsh-desktop-context-menu";
       tag.dataset.pluginCss = toastTagId;
       tag.textContent = toastCss;
       document.head.appendChild(tag);
@@ -162,6 +162,8 @@ window.__ModuleLoader__.load({
     });
     /** Workspace directory open handler installed by apply(); runContextAction dispatches into it. */
     let desktopOpenWorkspacePath = null;
+    /** 动作时刻的词典（apply 时绑定）：toast 反馈文案随活动语言。 */
+    let dduiT = null;
     /** Show the right-click menu at a viewport point, flipping near the edges. */
     function showFloatingMenu(x, y, items, target, payload) {
       const itemHeight = 26;
@@ -259,18 +261,18 @@ window.__ModuleLoader__.load({
     /** Paste the clipboard text into any input: the composer uses the app pipeline, others insert directly. */
     async function pasteIntoField(field) {
       if (typeof navigator === "undefined" || navigator.clipboard === void 0) {
-        showDesktopToast("error", "无法访问剪贴板");
+        showDesktopToast("error", dduiT?.("toast.clipboardUnavailable") ?? "无法访问剪贴板");
         return;
       }
       let text;
       try {
         text = await navigator.clipboard.readText();
       } catch (error) {
-        showDesktopToast("error", "无法读取剪贴板（权限被拒绝）");
+        showDesktopToast("error", dduiT?.("toast.clipboardDenied") ?? "无法读取剪贴板（权限被拒绝）");
         return;
       }
       if (text === "") {
-        showDesktopToast("error", "剪贴板为空");
+        showDesktopToast("error", dduiT?.("toast.clipboardEmpty") ?? "剪贴板为空");
         return;
       }
       if (field.closest("[data-composer-card]") !== null) {
@@ -285,8 +287,15 @@ window.__ModuleLoader__.load({
         );
         return;
       }
+      // 非组合器输入：setRangeText 替换选区并派发 input 事件（替代已废弃的
+      // document.execCommand("insertText")；注意无撤销栈条目，属已知取舍）。
       field.focus();
-      document.execCommand("insertText", false, text);
+      const start = typeof field.selectionStart === "number" ? field.selectionStart : field.value.length;
+      const end = typeof field.selectionEnd === "number" ? field.selectionEnd : field.value.length;
+      if (typeof field.setRangeText === "function") {
+        field.setRangeText(text, start, end, "end");
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      }
     }
     /** Execute one context-menu action against its target field. */
     function runContextAction(id) {
@@ -321,9 +330,10 @@ window.__ModuleLoader__.load({
           payload.imageSrc !== ""
         ) {
           void copyImageSource(payload.imageSrc).then((kind) => {
-            if (kind === "image") showDesktopToast("success", "已复制图片");
+            if (kind === "image")
+              showDesktopToast("success", dduiT?.("toast.imageCopied") ?? "已复制图片");
             else if (kind === "url")
-              showDesktopToast("success", "已复制图片地址");
+              showDesktopToast("success", dduiT?.("toast.imageUrlCopied") ?? "已复制图片地址");
           });
           return;
         }
@@ -335,7 +345,8 @@ window.__ModuleLoader__.load({
           (0, _deepseek_ai_dsh_client_ui_primitives.writeClipboard)(
             payload.text,
           ).then((ok) => {
-            if (ok) showDesktopToast("success", "已复制");
+            if (ok)
+              showDesktopToast("success", dduiT?.("toast.copied") ?? "已复制");
           });
         }
         return;
@@ -354,14 +365,30 @@ window.__ModuleLoader__.load({
         void pasteIntoField(field);
         return;
       }
+      const start = typeof field.selectionStart === "number" ? field.selectionStart : 0;
+      const end = typeof field.selectionEnd === "number" ? field.selectionEnd : 0;
+      const selected = typeof field.value === "string" ? field.value.slice(start, end) : "";
       if (id === "cut") {
-        document.execCommand("cut");
-        showDesktopToast("success", "已剪切");
+        // 替代已废弃的 execCommand("cut")：先写剪贴板成功，再移除选区并
+        // 派发 input 事件（组合器的草稿镜像依赖 input 事件同步）。
+        if (selected !== "") {
+          void (0, _deepseek_ai_dsh_client_ui_primitives.writeClipboard)(selected).then((ok) => {
+            if (!ok) return;
+            if (typeof field.setRangeText === "function") {
+              field.setRangeText("", start, end, "end");
+              field.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+            showDesktopToast("success", dduiT?.("toast.cut") ?? "已剪切");
+          });
+        }
         return;
       }
       if (id === "copy") {
-        document.execCommand("copy");
-        showDesktopToast("success", "已复制");
+        // 替代已废弃的 execCommand("copy")：选中文本直接写剪贴板。
+        if (selected !== "") {
+          void (0, _deepseek_ai_dsh_client_ui_primitives.writeClipboard)(selected);
+        }
+        showDesktopToast("success", dduiT?.("toast.copied") ?? "已复制");
       }
     }
     /** Copy an image: bitmap when the clipboard API allows it, otherwise its URL. */
@@ -440,12 +467,12 @@ window.__ModuleLoader__.load({
             event.clientX,
             event.clientY,
             [
-              { id: "cut", label: "剪切", disabled: !selected || readOnly },
-              { id: "copy", label: "复制", disabled: !selected },
-              { id: "paste", label: "粘贴", disabled: readOnly },
-              { id: "selectAll", label: "全选", disabled: !hasText },
+              { id: "cut", label: t("cut"), disabled: !selected || readOnly },
+              { id: "copy", label: t("copy"), disabled: !selected },
+              { id: "paste", label: t("paste"), disabled: readOnly },
+              { id: "selectAll", label: t("selectAll"), disabled: !hasText },
               { id: "sep", sep: true },
-              { id: "reload", label: "刷新", disabled: false },
+              { id: "reload", label: t("reload"), disabled: false },
             ],
             field,
           );
@@ -472,9 +499,9 @@ window.__ModuleLoader__.load({
           event.clientX,
           event.clientY,
           [
-            { id: "copySel", label: "复制", disabled: !canCopy },
+            { id: "copySel", label: t("copy"), disabled: !canCopy },
             { id: "sep", sep: true },
-            { id: "reload", label: "刷新", disabled: false },
+            { id: "reload", label: t("reload"), disabled: false },
           ],
           void 0,
           { text: copyText, imageSrc: copyImageSrc },
@@ -518,12 +545,36 @@ window.__ModuleLoader__.load({
       "feature.description": "右键输入框可剪切 / 复制 / 粘贴 / 全选；右键工作区可打开所在文件夹；右键选中内容可直接复制",
       "openWorkspace": "在资源管理器中打开",
       "openWorkspace.error": "无法打开工作区目录",
+      "cut": "剪切",
+      "copy": "复制",
+      "paste": "粘贴",
+      "selectAll": "全选",
+      "reload": "刷新",
+      "toast.cut": "已剪切",
+      "toast.copied": "已复制",
+      "toast.imageCopied": "已复制图片",
+      "toast.imageUrlCopied": "已复制图片地址",
+      "toast.clipboardUnavailable": "无法访问剪贴板",
+      "toast.clipboardDenied": "无法读取剪贴板（权限被拒绝）",
+      "toast.clipboardEmpty": "剪贴板为空",
     };
     const en = {
       "feature.title": "Context menu",
       "feature.description": "Right-click inputs for cut / copy / paste / select-all, workspaces to open their folder, and selections to copy",
       "openWorkspace": "Open in Explorer",
       "openWorkspace.error": "Could not open the workspace directory",
+      "cut": "Cut",
+      "copy": "Copy",
+      "paste": "Paste",
+      "selectAll": "Select all",
+      "reload": "Reload",
+      "toast.cut": "Cut",
+      "toast.copied": "Copied",
+      "toast.imageCopied": "Image copied",
+      "toast.imageUrlCopied": "Image URL copied",
+      "toast.clipboardUnavailable": "Clipboard unavailable",
+      "toast.clipboardDenied": "Could not read the clipboard (permission denied)",
+      "toast.clipboardEmpty": "Clipboard is empty",
     };
     //#endregion
 
@@ -537,6 +588,7 @@ window.__ModuleLoader__.load({
      */
     function apply(ctx) {
       const t = ctx.locale.bind(NS);
+      dduiT = t;
       ctx.effect(
         () =>
           ctx.locale.register(NS, {

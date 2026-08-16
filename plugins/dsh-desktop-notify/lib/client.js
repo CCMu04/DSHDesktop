@@ -282,7 +282,13 @@ window.__ModuleLoader__.load({
         prevPendingCount = 0;
         if (id === void 0) return;
         const binding = sessions.binding(id);
-        if (binding === void 0) return;
+        if (binding === void 0) {
+          // binding 尚未就绪（会话刚创建）：不能把 currentId 留在已设置
+          // 状态——否则下次列表通知会因 id === currentId 提前返回，该会话
+          // 永远不会被订阅（直到切换会话）。重置后等下一次列表通知重试。
+          currentId = null;
+          return;
+        }
         sessionOff = binding.session.subscribe(onSessionChange);
         onSessionChange();
       };

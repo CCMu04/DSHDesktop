@@ -22,6 +22,7 @@ window.__ModuleLoader__.load({
     let _deepseek_ai_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
     const { jsx, jsxs } = react_jsx_runtime;
     const { createElement } = react;
+    const { RiskConfirmation } = _deepseek_ai_dsh_client_ui_primitives;
 
     //#region 内置图标库（lucide-static v1.31.0，ISC 许可，内联 SVG path）
     function makeLucideIcon(children) {
@@ -329,7 +330,7 @@ window.__ModuleLoader__.load({
       ".ddgit_diffToggle:disabled{opacity:.4;cursor:default}" +
       ".ddgit_diffScroll{flex:1;min-height:0;overflow:auto}" +
       ".ddgit_diffTable{width:100%;border-collapse:collapse;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:18px}" +
-      ".ddgit_diffRow{display:flex}" +
+      ".ddgit_diffRow{display:flex;content-visibility:auto;contain-intrinsic-size:auto 18px}" +
       ".ddgit_diffGutter{flex:none;width:3.2em;box-sizing:border-box;padding:0 6px;text-align:right;color:var(--dsw-alias-label-dimmed);background:var(--dsw-alias-bg-base);-webkit-user-select:none;user-select:none}" +
       ".ddgit_diffGutterOld{border-right:1px solid var(--dsw-alias-border-l2)}" +
       ".ddgit_diffText{flex:1;min-width:0;padding:0 10px;white-space:pre;color:var(--dsw-alias-label-primary)}" +
@@ -481,6 +482,10 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = react.useState(false);
       const [hint, setHint] = react.useState(null); // { ok, text }
       const hintTimer = react.useRef(null);
+      // 还原确认（官方 RiskConfirmation 模态，替代原生 window.confirm）：
+      // restoreTarget 非空时弹出；acknowledged 每次打开重置。
+      const [restoreTarget, setRestoreTarget] = react.useState(null); // { path, repo }
+      const [acknowledged, setAcknowledged] = react.useState(false);
       // 分栏尺寸：文件列表宽度 / 历史区高度（可拖拽，host 端 prefs 持久化；
       // localStorage 因后端端口每次启动变化而跨重启失效）。
       const [listWidth, setListWidth] = react.useState(240);
@@ -578,8 +583,10 @@ window.__ModuleLoader__.load({
       /** 刷新状态 + 历史（保持选中项重取 diff）。快照绑定当前 repo。 */
       const refresh = react.useCallback(() => {
         setStatus((s) => ({ ...s, loading: true, repoPath: repo, error: null }));
-        fetchGitStatus(repo)
-          .then((snap) => {
+        setLog((l) => ({ ...l, loading: true, error: null }));
+        // status 与 log 并行拉取：任一失败各自呈现错误态，互不影响。
+        Promise.all([
+          fetchGitStatus(repo).then((snap) => {
             setStatus({
               loading: false,
               repo: snap.repo,
@@ -594,19 +601,27 @@ window.__ModuleLoader__.load({
               const still = (snap.files ?? []).some((f) => f.path === sel.path);
               return still ? sel : null;
             });
-            return fetchGitLog(repo)
-              .then((entries) => setLog({ loading: false, entries, error: null }))
-              .catch(() =>
-                setLog((l) => ({ ...l, loading: false, entries: l.entries })),
-              );
-          })
-          .catch((error) => {
-            setStatus((s) => ({
-              ...s,
-              loading: false,
-              error: error instanceof Error ? error.message : String(error),
-            }));
-          });
+          }),
+          fetchGitLog(repo)
+            .then((entries) =>
+              setLog({ loading: false, entries, error: null }),
+            )
+            .catch((error) =>
+              // log 失败：保留旧条目并呈现错误提示（不再静默）。
+              setLog((l) => ({
+                ...l,
+                loading: false,
+                error: error instanceof Error ? error.message : String(error),
+              })),
+            ),
+        ]).catch((error) => {
+          // status 失败：进入错误态（log 的失败已由各自 catch 呈现）。
+          setStatus((s) => ({
+            ...s,
+            loading: false,
+            error: error instanceof Error ? error.message : String(error),
+          }));
+        });
       }, [repo]);
 
       // 初始加载 + 会话变化：重扫仓库列表、恢复上次选择的仓库（保存值在
@@ -801,8 +816,9 @@ window.__ModuleLoader__.load({
                           status.repoPath !== repo,
                         onClick: (event) => {
                           event.stopPropagation();
-                          if (!window.confirm(t("panel.restoreConfirm"))) return;
-                          runAction(t("panel.restored"), () => gitRestore(file.path, repo));
+                          // 打开还原确认模态（勾选「不可撤销」后确认）。
+                          setAcknowledged(false);
+                          setRestoreTarget({ path: file.path, repo });
                         },
                         children: jsx(Undo2Icon, { size: 13 }),
                       }),
@@ -837,8 +853,8 @@ window.__ModuleLoader__.load({
             setRepoOpen(false);
           }
         };
-        document.addEventListener("mousedown", onDown);
-        return () => document.removeEventListener("mousedown", onDown);
+        document.addEventListener("pointerdown", onDown);
+        return () => document.removeEventListener("pointerdown", onDown);
       }, [repoOpen]);
 
       const repoOptions = repos.filter((r) => r !== "");
@@ -1167,9 +1183,13 @@ window.__ModuleLoader__.load({
               jsx("div", {
                 className: "ddgit_historyList",
                 children:
-                  log.entries.length === 0
-                    ? jsx("div", { className: "ddgit_empty", children: t("panel.noCommits") })
-                    : log.entries.map((entry, index) =>
+                  log.error !== null
+                    ? jsx("div", {
+                        className: "ddgit_empty",
+                        children: t("panel.logFailed") + " (" + log.error + ")",
+                      })
+                    : log.entries.length === 0
+                      ? jsx("div", { className: "ddgit_empty", children: t("panel.noCommits") })                    : log.entries.map((entry, index) =>
                         jsxs("div", {
                           className: "ddgit_historyRow",
                           title: entry.hash,
@@ -1191,6 +1211,31 @@ window.__ModuleLoader__.load({
                       ),
               }),
             ],
+          }),
+          // 还原确认模态（官方 RiskConfirmation，portal 到 body）。
+          jsx(RiskConfirmation, {
+            open: restoreTarget !== null,
+            title: t("panel.restore"),
+            description: t("panel.restoreConfirm"),
+            acknowledgeLabel: t("panel.restoreAcknowledge"),
+            cancelLabel: t("panel.cancel"),
+            confirmLabel: t("panel.restore"),
+            acknowledged,
+            onAcknowledgedChange: setAcknowledged,
+            onCancel: () => {
+              setRestoreTarget(null);
+              setAcknowledged(false);
+            },
+            onConfirm: () => {
+              const target = restoreTarget;
+              setRestoreTarget(null);
+              setAcknowledged(false);
+              if (target !== null) {
+                runAction(t("panel.restored"), () =>
+                  gitRestore(target.path, target.repo),
+                );
+              }
+            },
           }),
         ],
       });
@@ -1217,6 +1262,8 @@ window.__ModuleLoader__.load({
       "panel.restore": "还原",
       "panel.restored": "已还原",
       "panel.restoreConfirm": "确定丢弃该文件的工作区改动？此操作不可撤销。",
+      "panel.restoreAcknowledge": "我已了解此操作不可撤销",
+      "panel.cancel": "取消",
       "panel.noChanges": "没有改动",
       "panel.selectHint": "在左侧选择一个文件查看 diff",
       "panel.diffStaged": "暂存区",
@@ -1232,6 +1279,7 @@ window.__ModuleLoader__.load({
       "panel.committed": "已提交",
       "panel.history": "历史",
       "panel.noCommits": "暂无提交",
+      "panel.logFailed": "历史读取失败",
       "panel.loadFailed": "读取失败",
       "viewer.loading": "加载中…",
     };
@@ -1256,6 +1304,8 @@ window.__ModuleLoader__.load({
       "panel.restored": "Restored",
       "panel.restoreConfirm":
         "Discard worktree changes for this file? This cannot be undone.",
+      "panel.restoreAcknowledge": "I understand this cannot be undone",
+      "panel.cancel": "Cancel",
       "panel.noChanges": "No changes",
       "panel.selectHint": "Select a file on the left to view its diff",
       "panel.diffStaged": "Staged",
@@ -1271,6 +1321,7 @@ window.__ModuleLoader__.load({
       "panel.committed": "Committed",
       "panel.history": "History",
       "panel.noCommits": "No commits yet",
+      "panel.logFailed": "Failed to load history",
       "panel.loadFailed": "Failed to load",
       "viewer.loading": "Loading…",
     };

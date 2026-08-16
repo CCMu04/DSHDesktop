@@ -213,11 +213,7 @@ window.__ModuleLoader__.load({
       let info = null;
       let latest = null;
       try {
-        const infoRes = await fetch("/api/desktop-updates/version", {
-          headers: { accept: "application/json" },
-          cache: "no-store",
-        });
-        info = infoRes.ok ? await infoRes.json() : null;
+        info = await fetchVersionInfo();
       } catch {}
       try {
         latest = await fetchLatestRelease();
@@ -311,6 +307,20 @@ window.__ModuleLoader__.load({
         });
         void refreshUpdateState();
       }
+    }
+    /** 共享的本机客户端信息请求（UpdatesSection 与 refreshUpdateState 共用，
+     *  避免启动时对 /version 的重复请求；失败返回 null）。 */
+    let dduVersionInfoPromise = null;
+    function fetchVersionInfo() {
+      if (dduVersionInfoPromise === null) {
+        dduVersionInfoPromise = fetch("/api/desktop-updates/version", {
+          headers: { accept: "application/json" },
+          cache: "no-store",
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .catch(() => null);
+      }
+      return dduVersionInfoPromise;
     }
     //#endregion
 
@@ -439,39 +449,32 @@ window.__ModuleLoader__.load({
       const [infoFailed, setInfoFailed] = react.useState(false);
       const [checking, setChecking] = react.useState(false);
       // 挂载即读取本机客户端信息（版本、系统、安装方式），无需等待检查。
+      // 与 refreshUpdateState 共享同一请求（fetchVersionInfo 缓存 promise）。
       react.useEffect(() => {
         let current = true;
-        fetch("/api/desktop-updates/version", {
-          headers: { accept: "application/json" },
-          cache: "no-store",
-        })
-          .then((res) =>
-            res.ok
-              ? res.json()
-              : Promise.reject(new Error("version-http-" + res.status)),
-          )
-          .then((body) => {
-            if (!current) return;
-            setInfo({
-              currentVersion:
-                typeof body?.currentVersion === "string"
-                  ? body.currentVersion
-                  : null,
-              dshVersion:
-                typeof body?.dshVersion === "string" ? body.dshVersion : null,
-              os: typeof body?.os === "string" ? body.os : null,
-              arch: typeof body?.arch === "string" ? body.arch : null,
-              installKind:
-                body?.installKind === "installer" ||
-                body?.installKind === "portable" ||
-                body?.installKind === "dev"
-                  ? body.installKind
-                  : null,
-            });
-          })
-          .catch(() => {
-            if (current) setInfoFailed(true);
+        fetchVersionInfo().then((body) => {
+          if (!current) return;
+          if (body === null) {
+            setInfoFailed(true);
+            return;
+          }
+          setInfo({
+            currentVersion:
+              typeof body?.currentVersion === "string"
+                ? body.currentVersion
+                : null,
+            dshVersion:
+              typeof body?.dshVersion === "string" ? body.dshVersion : null,
+            os: typeof body?.os === "string" ? body.os : null,
+            arch: typeof body?.arch === "string" ? body.arch : null,
+            installKind:
+              body?.installKind === "installer" ||
+              body?.installKind === "portable" ||
+              body?.installKind === "dev"
+                ? body.installKind
+                : null,
           });
+        });
         return () => {
           current = false;
         };
@@ -973,8 +976,6 @@ window.__ModuleLoader__.load({
       "updates.checkFailedLimit": "检查更新失败（GitHub 接口限流，请稍后再试）",
       "updates.checkFailedNetwork": "检查更新失败（网络连接异常，请检查网络或代理设置）",
       "updates.updateAvailable": "发现新版本",
-      "updates.releasedAt": "发布于",
-      "updates.releaseNotes": "更新说明：",
       "updates.download": "前往下载",
       "updates.notNow": "暂不",
       "updates.sidebarUpdate": "更新",
@@ -1006,8 +1007,6 @@ window.__ModuleLoader__.load({
       "updates.checkFailedNetwork":
         "Update check failed (network error, please check your connection or proxy)",
       "updates.updateAvailable": "New version available",
-      "updates.releasedAt": "Released",
-      "updates.releaseNotes": "Release notes:",
       "updates.download": "Go to download",
       "updates.notNow": "Not now",
       "updates.sidebarUpdate": "Update",
@@ -1102,6 +1101,20 @@ window.__ModuleLoader__.load({
       let active = [];
       const applyConfig = (config) => {
         for (const dispose of active) dispose();
+        if (!config.enabled) {
+          // 关闭开关：清掉主进程事件可能写入的残留状态（弹窗/下载/按钮），
+          // 避免重新开启时 mountNativeDialog 立即按残留状态弹出旧窗。
+          setUpdateState({
+            available: false,
+            tag: null,
+            latest: null,
+            phase: "idle",
+            percent: 0,
+            transferred: 0,
+            total: 0,
+            dialogOpen: false,
+          });
+        }
         active = installSection(config);
       };
       applyConfig({ ...dduUpdatesDefaultConfig });
@@ -1138,6 +1151,7 @@ window.__ModuleLoader__.load({
       const id = "dsh-desktop-updates-toast-" + ++dduToastSeq;
       const tag = document.createElement("div");
       tag.id = id;
+      tag.setAttribute("role", "status");
       tag.style.cssText =
         "position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:3000;max-width:min(480px,calc(100vw - 32px));padding:9px 14px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);box-shadow:var(--dsw-shadow-lv2);color:var(--dsw-alias-label-primary);border-radius:10px;font-size:13px;line-height:20px;overflow-wrap:anywhere";
       if (kind === "error") {
@@ -1154,6 +1168,7 @@ window.__ModuleLoader__.load({
       const id = "dsh-desktop-updates-toast-" + ++dduToastSeq;
       const tag = document.createElement("div");
       tag.id = id;
+      tag.setAttribute("role", "status");
       tag.style.cssText =
         "position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:3000;max-width:min(540px,calc(100vw - 32px));padding:10px 16px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);box-shadow:var(--dsw-shadow-lv2);color:var(--dsw-alias-label-primary);border-radius:10px;font-size:13px;line-height:20px;cursor:pointer;overflow-wrap:anywhere";
       tag.textContent = "发现新版本 " + version + "，点击下载";

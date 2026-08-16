@@ -9,6 +9,13 @@
  *   settingsDrawer   — settings panel as a left-side drawer (CSS + close shim)
  *   sessionLogExport — 「导出会话」button next to the session title
  *   statsLine        — full-width centered composer dock stats row
+ *   openWorkspace    — 「打开工作区」button (open the current workspace in Explorer)
+ *   chatPolish       — reasoning-text clamp + centered loading-history hint
+ *
+ * 注意：host 半区的 DEFAULT_CONFIG / CONFIG_KEYS 目前只有前 3 个键
+ * （settingsDrawer / sessionLogExport / statsLine）——openWorkspace 与
+ * chatPolish 的开关无法经 host 持久化（narrowPatch 白名单外丢弃），
+ * 保存后回退默认（永远生效）。两侧键集同步后方可关闭这两个功能。
  *
  * 功能增强（逻辑类）已拆分为独立插件：dsh-desktop-plugin-list（插件列表）、
  * dsh-desktop-context-menu（右键菜单）、dsh-desktop-updates（检查更新），
@@ -424,7 +431,7 @@ window.__ModuleLoader__.load({
       "config.settingsDrawer.desc": "打开设置时从左侧滑出面板，取代居中的弹窗",
       "config.sessionLogExport": "会话日志导出",
       "config.sessionLogExport.desc":
-        "在页签行右侧显示「导出会话」按钮（中文），一键打包当前会话",
+        "在页签行右侧显示「导出会话」按钮，一键打包当前会话",
       "config.statsLine": "统计栏",
       "config.statsLine.desc":
         "输入框下方的统计信息占满整行居中显示，超出部分以省略号收尾",
@@ -698,18 +705,12 @@ window.__ModuleLoader__.load({
     // 插件入口：总装基础设施 + 按配置安装各功能（installFeatures 调度）
     /**
      * 插件入口（browser half）：
-     *   1. 总装基础设施 —— toast / 浮层 host、中英文案词典（与开关无关，始终启用）；
+     *   1. 总装基础设施 —— 中英文案词典（与开关无关，始终启用）；
      *   2. installFeatures(config) —— 按配置快照安装各功能，每个安装返回 disposer；
      *   3. 启动时先按「全开」安装（避免界面先缺功能再补），配置到达后立即按真实
      *      配置重装收敛（dispose 旧的 → 安装新的）。
      */
-    const inject = [
-      "slots",
-      "locale",
-      "remote",
-      "remote.pluginInventory",
-      "connection",
-    ];
+    const inject = ["slots", "locale"];
     function apply(ctx) {
       const t = ctx.locale.bind(NS);
       // --- 总装（always-on）：中英文案词典。

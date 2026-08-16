@@ -7,13 +7,14 @@
  *
  * 路由：
  *   /api/desktop-git/config    — 功能开关（exact，通用约定）
- *   /api/desktop-git/status    — GET ?session=&path= 仓库状态（分支 + 改动文件）
- *   /api/desktop-git/diff      — GET ?session=&path=&staged=0|1 统一 diff
- *   /api/desktop-git/log       — GET ?session=&path=&limit= 提交历史
- *   /api/desktop-git/stage     — POST {session, path?} git add
- *   /api/desktop-git/unstage   — POST {session, path?} git restore --staged
- *   /api/desktop-git/commit    — POST {session, message} git commit -m
- *   /api/desktop-git/restore   — POST {session, path} git restore（丢弃工作区改动）
+ *   /api/desktop-git/repos     — GET ?session= cwd 内 git 仓库目录（prefix）
+ *   /api/desktop-git/status    — GET ?session=&path=&repo= 仓库状态（分支 + 改动文件）
+ *   /api/desktop-git/diff      — GET ?session=&path=&staged=0|1&repo= 统一 diff
+ *   /api/desktop-git/log       — GET ?session=&path=&limit=&repo= 提交历史
+ *   /api/desktop-git/stage     — POST {session, path?, repo?} git add
+ *   /api/desktop-git/unstage   — POST {session, path?, repo?} git restore --staged
+ *   /api/desktop-git/commit    — POST {session, message, repo?} git commit -m
+ *   /api/desktop-git/restore   — POST {session, path, repo?} git restore（丢弃工作区改动）
  *
  * 安全模型：
  *   - 每个请求携带 session，以会话 header.cwd realpath 为白名单根；
@@ -25,12 +26,12 @@ import { spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
   writeFileSync,
 } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, resolve as pathResolve, sep } from "node:path";
 
@@ -66,12 +67,14 @@ const REPO_SCAN_SKIP = new Set([
 ]);
 
 /**
- * 扫描目录树（深度 ≤ 3）中的 git 仓库根（含 cwd 自身）；进入某个仓库
+ * 异步扫描目录树（深度 ≤ 3）中的 git 仓库根（含 cwd 自身）；进入某个仓库
  * 后不再深入（嵌套仓库/子模块忽略）。返回绝对路径列表（cwd 在前）。
+ * 用 fs.promises 串行遍历：同步 readdirSync 递归会在大工作区阻塞 host
+ * 事件循环（请求处理器内执行）。
  */
-function findGitRepos(root) {
+async function findGitRepos(root) {
   const found = [];
-  const walk = (dir, depth) => {
+  const walk = async (dir, depth) => {
     if (existsSync(join(dir, ".git"))) {
       found.push(dir);
       return;
@@ -79,7 +82,7 @@ function findGitRepos(root) {
     if (depth >= REPO_SCAN_MAX_DEPTH) return;
     let entries;
     try {
-      entries = readdirSync(dir, { withFileTypes: true });
+      entries = await readdir(dir, { withFileTypes: true });
     } catch {
       return;
     }
@@ -87,10 +90,10 @@ function findGitRepos(root) {
       if (!entry.isDirectory()) continue;
       if (entry.name.startsWith(".")) continue;
       if (REPO_SCAN_SKIP.has(entry.name)) continue;
-      walk(join(dir, entry.name), depth + 1);
+      await walk(join(dir, entry.name), depth + 1);
     }
   };
-  walk(root, 0);
+  await walk(root, 0);
   return found;
 }
 
@@ -533,9 +536,9 @@ export function apply(ctx, config = {}) {
   }
 
   /** cwd 内所有 git 仓库（含 cwd 自身）；path 为相对 cwd 的路径。 */
-  const reposRoute = makeGetRoute("/api/desktop-git/repos", (req) => {
+  const reposRoute = makeGetRoute("/api/desktop-git/repos", async (req) => {
     const { cwd } = resolveRequest(req.url, false);
-    const found = findGitRepos(cwd);
+    const found = await findGitRepos(cwd);
     return {
       repos: found.map((abs) => gitRelPath(cwd, abs)),
     };

@@ -62,6 +62,7 @@ window.__ModuleLoader__.load({
       const [failed, setFailed] = react.useState(null);
       react.useEffect(() => {
         let current = true;
+        let reloadTimer = null;
         const reload = () => {
           const entries = features.entries();
           Promise.all(
@@ -96,11 +97,17 @@ window.__ModuleLoader__.load({
           });
         };
         reload();
-        // 子项注册/卸载（插件增删）时重载。
-        const off = features.subscribe(reload);
+        // 子项注册/卸载（插件增删）时重载。防抖合并突发重注册（如 locale
+        // 切换触发的批量 re-register），避免并发全量 re-fetch。
+        const scheduleReload = () => {
+          if (reloadTimer !== null) clearTimeout(reloadTimer);
+          reloadTimer = window.setTimeout(reload, 100);
+        };
+        const off = features.subscribe(scheduleReload);
         return () => {
           current = false;
           off();
+          if (reloadTimer !== null) clearTimeout(reloadTimer);
         };
       }, [features]);
       const toggle = (id) => {
@@ -124,6 +131,10 @@ window.__ModuleLoader__.load({
       };
       const save = () => {
         if (state.status !== "ready" || saving) return;
+        // 无实际修改时不保存（避免白 reload）。
+        if (state.rows.some((row) => state.draft[row.id] !== row.value) === false) {
+          return;
+        }
         setSaving(true);
         setFailed(null);
         Promise.all(
@@ -136,9 +147,13 @@ window.__ModuleLoader__.load({
           globalThis.location.reload();
         }, () => {
           setSaving(false);
-          setFailed("saveFailed");
+          setFailed(t("saveFailed"));
         });
       };
+      /** 是否存在未保存的修改（保存按钮的启用条件）。 */
+      const dirty =
+        state.status === "ready" &&
+        state.rows.some((row) => state.draft[row.id] !== row.value);
       return (0, react_jsx_runtime.jsxs)("div", {
         className: open ? "dduiFg_card dduiFg_cardOpen" : "dduiFg_card",
         children: [
@@ -244,7 +259,7 @@ window.__ModuleLoader__.load({
                                   : (0, react_jsx_runtime.jsx)("p", {
                                       className: "dduiFg_failed",
                                       role: "alert",
-                                      children: t(failed),
+                                      children: failed,
                                     }),
                                 (0, react_jsx_runtime.jsx)("button", {
                                   type: "button",
@@ -256,7 +271,7 @@ window.__ModuleLoader__.load({
                                 (0, react_jsx_runtime.jsx)("button", {
                                   type: "button",
                                   className: "dduiFg_save",
-                                  disabled: saving,
+                                  disabled: saving || !dirty,
                                   onClick: save,
                                   children: saving ? t("saving") : t("save"),
                                 }),
@@ -324,7 +339,10 @@ window.__ModuleLoader__.load({
             },
             inject: () => ({
               features: {
-                entries: () => ctx.slots.entries("desktop.features.item"),
+                // entriesOfSlot 只投影每格胜者（同 id 不同 priority 注册时
+                // 影子条目不渲染），避免重复行与 draft 互相覆盖。
+                entries: () =>
+                  ctx.slots.entriesOfSlot("desktop.features.item"),
                 subscribe: (listener) =>
                   ctx.slots.subscribe("desktop.features.item", listener),
               },

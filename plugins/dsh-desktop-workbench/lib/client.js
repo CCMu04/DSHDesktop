@@ -28,8 +28,11 @@
  *     渲染），视图切换时整棵子树卸载；用 MutationObserver 跟随
  *     [data-chat-flow] 的出现/消失，重新挂载列并恢复布局状态；
  *   - React 收敛子节点时可能摘掉我们追加的列，childList 观察器自愈重挂；
- *   - 滚动视口高度变化（窗口 resize / 官方 details 开合）由 ResizeObserver
- *     跟随，工作台列高度实时同步。
+ *   - 滚动视口高度变化（窗口 resize / 官方 details 开合）无需显式监听：
+ *     工作台列与 scrollBody 同处 grid 第二行（grid-row 2），列高由
+ *     align-self: stretch 自动等于 scrollBody 视口高度（没有
+ *     ResizeObserver，也没有 sticky——列是 scrollBody 的兄弟节点，
+ *     消息流滚动时天然保持可见）。
  */
 window.__ModuleLoader__.load({
   id: "dsh-desktop-workbench",
@@ -412,14 +415,18 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * 把工作台列接进对话区 scrollBody：
-     *   - scrollBody 变两列 grid：左列 = 官方内容（消息流槽 + composerSeat，
-     *     均自动落在第一列），右列 = 工作台（grid-column 2 / grid-row 1 / -1，
-     *     跨消息流与输入框两行——输入框不会顶起工作台）；
-     *   - 列高钉在 scrollBody 视口高度（clientHeight），ResizeObserver 跟随
-     *     窗口/布局变化；sticky top 0 让消息流滚动时工作台保持可见；
+     * 把工作台列接进对话区根（[data-phase]）：
+     *   - 官方根由 flex column 改造成两行 grid：第一行 = 官方会话头
+     *     （header 横跨两列，grid-column 1 / -1），第二行 = 内容行，分两列
+     *     ——左列 = 官方 scrollBody（消息流 + 输入框，自动落在第一列），
+     *     右列 = 工作台（grid-column 2 / grid-row 2，跨消息流与输入框
+     *     两行——输入框不会顶起工作台）；
+     *   - 列高 = 内容行高 = scrollBody 视口高度：align-self: stretch
+     *     自动跟随窗口 resize / 官方 details 开合等视口高度变化，无需
+     *     ResizeObserver；列是 scrollBody 的兄弟而非子节点，消息流滚动时
+     *     工作台保持可见（不需要 sticky）；
      *   - 轨道宽度由 --ddwb-chat-track 变量控制（0 = 收起）；
-     *   - 列挂在外层容器而非 ChatView 根内：会话切换 / 视图切换只改变
+     *   - 列挂在外层根而非 ChatView 内：会话切换 / 视图切换只改变
      *     scrollBody 内部内容（ChatView 卸载重挂），列本体不销毁——
      *     [data-chat-flow] 消失时把轨道钳 0（隐藏），重新出现时恢复。
      * 返回 { setTrack(width), dispose }。

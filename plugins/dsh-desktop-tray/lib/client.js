@@ -32,7 +32,12 @@ window.__ModuleLoader__.load({
       const handleCommand = (event) => {
         const command = typeof event?.detail === "string" ? event.detail : "";
         if (command === "new-session") {
-          ctx.workspaces.startSession();
+          // startSession 可能返回 promise（官方服务）也可能同步完成（测试
+          // mock）——Promise.resolve 包装统一处理，失败记录而非静默丢弃
+          // （与 add-workspace 分支的 catch 对齐，避免 unhandled rejection）。
+          void Promise.resolve(ctx.workspaces.startSession()).catch((error) => {
+            console.warn("dsh-desktop-tray: new-session failed:", error);
+          });
         } else if (command === "add-workspace") {
           ctx.workspaces
             .pickDirectory()
