@@ -16,10 +16,30 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog, Menu, shell } from 'electron'
+import { app, BrowserWindow, dialog, Menu, nativeImage, nativeTheme, net as electronNet, Notification, screen, shell, Tray } from 'electron'
 import electronUpdater from 'electron-updater'
 import { ensureBundledPlugin } from './builtin-plugin.mjs'
 import { prepareDesktopToolchain } from './toolchain.mjs'
+import {
+  buildCloseDialogOptions,
+  CLOSE_BEHAVIOR_FILE,
+  MINIMIZE_TO_TRAY_NOTIFICATION,
+  parseCloseBehavior,
+  serializeCloseBehavior,
+} from './close-behavior.mjs'
+import {
+  buildUpdateFailedOptions,
+  buildUpdateFoundOptions,
+  buildUpToDateOptions,
+  isUpdateAvailable,
+  LATEST_RELEASE_URL,
+} from './update-check.mjs'
+import {
+  parseWindowState,
+  sanitizeWindowState,
+  serializeWindowState,
+  WINDOW_STATE_FILE,
+} from './window-state.mjs'
 
 const { autoUpdater } = electronUpdater
 
@@ -42,6 +62,22 @@ const nodeExecutablePath = app.isPackaged
 const backendHost = '127.0.0.1'
 const startupTimeoutMs = 60_000
 
+// Window controls overlay: the minimize / maximize / close glyphs are native
+// chrome drawn by the OS and cannot be styled by the page's CSS. The overlay
+// background stays transparent so the buttons sit on the page header; only
+// the symbol color must follow the theme, or the glyphs vanish on a dark
+// header. The loading page follows the OS color scheme; the backend page
+// reports its own theme (body[data-ds-dark-theme], the palette switch the
+// official UI and every bundled skin key off) through the console marker.
+const titleBarOverlayOptions = { color: '#00000000', height: 38 }
+const titleBarSymbolLight = '#22252b'
+const titleBarSymbolDark = '#ebeef2'
+const titleBarThemeMarker = '__DSH_TITLEBAR_THEME__:'
+// 渲染进程 → 主进程的「唤醒窗口」信标（console 标记通道，与主题标记同款）：
+// 完成提醒通知被点击时，渲染进程 window.focus() 无法恢复最小化窗口，
+// 主进程收到该标记后 restore + show + focus。
+const desktopWakeMarker = '__DSH_DESKTOP_WAKE__:'
+
 // Windows toasts (HTML5 Notification → system notifications) are attributed
 // through the AppUserModelID: without it Electron falls back to a generic
 // identity and the notification may not surface under the app's name/icon.
@@ -51,6 +87,7 @@ let backendProcess
 let backendExitCode = null
 let backendOrigin
 let mainWindow
+let tray
 let quitting = false
 let recentBackendOutput = ''
 let runtimeDirectory
@@ -377,6 +414,174 @@ function isBackendUrl(target) {
   }
 }
 
+function syncTitleBarOverlay(window, symbolColor) {
+  if (!window || window.isDestroyed()) return
+  window.setTitleBarOverlay({ ...titleBarOverlayOptions, symbolColor })
+}
+
+function syncTitleBarOverlayFromNativeTheme(window) {
+  syncTitleBarOverlay(window, nativeTheme.shouldUseDarkColors ? titleBarSymbolDark : titleBarSymbolLight)
+}
+
+// --- Close behavior: minimize to tray vs. full quit -----------------------
+// Closing the window stops the local backend and with it the reserved port,
+// so the next launch gets a new Web address. The first close asks once (with
+// a remember option); by default the window minimizes to the tray instead,
+// and only the tray menu's 退出 fully quits.
+
+function getCloseBehaviorPath() {
+  return path.join(resolveSharedDshHome(), CLOSE_BEHAVIOR_FILE)
+}
+
+// --- Window geometry persistence ------------------------------------------
+// The window bounds (normal bounds, so maximized/full-screen windows restore
+// their pre-maximize geometry), maximized and full-screen flags are saved to
+// $DSH_HOME/desktop-window.json and restored on the next launch.
+
+function getWindowStatePath() {
+  return path.join(resolveSharedDshHome(), WINDOW_STATE_FILE)
+}
+
+function loadWindowState() {
+  try {
+    const parsed = parseWindowState(readFileSync(getWindowStatePath(), 'utf8'))
+    return sanitizeWindowState(
+      parsed,
+      screen.getAllDisplays().map(display => display.workArea),
+    )
+  } catch {
+    return parseWindowState(undefined)
+  }
+}
+
+function saveWindowState() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const state = {
+    bounds: mainWindow.getNormalBounds(),
+    isMaximized: mainWindow.isMaximized(),
+    isFullScreen: mainWindow.isFullScreen(),
+  }
+  try {
+    mkdirSync(path.dirname(getWindowStatePath()), { recursive: true })
+    writeFileSync(getWindowStatePath(), serializeWindowState(state), 'utf8')
+  } catch {
+    // Persisting window geometry must never break the app.
+  }
+}
+
+function loadCloseBehavior() {
+  try {
+    return parseCloseBehavior(readFileSync(getCloseBehaviorPath(), 'utf8'))
+  } catch {
+    return parseCloseBehavior(undefined)
+  }
+}
+
+function saveCloseBehavior(config) {
+  mkdirSync(path.dirname(getCloseBehaviorPath()), { recursive: true })
+  writeFileSync(getCloseBehaviorPath(), serializeCloseBehavior(config), 'utf8')
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function minimizeToTray() {
+  ensureTray()
+  mainWindow?.hide()
+}
+
+function ensureTray() {
+  if (tray) return
+  tray = new Tray(nativeImage.createFromPath(path.join(shellDirectory, 'assets', 'icon.png')))
+  tray.setToolTip('DeepSeek Harness')
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: '显示主窗口', click: showMainWindow },
+      { type: 'separator' },
+      { label: '新建任务', click: () => sendTrayCommand('new-session') },
+      { label: '添加工作区', click: () => sendTrayCommand('add-workspace') },
+      { type: 'separator' },
+      { label: '检查更新', click: () => void checkForUpdates() },
+      { type: 'separator' },
+      { label: '关闭行为设置…', click: () => void askCloseBehavior() },
+      { type: 'separator' },
+      { label: '退出', click: () => app.quit() },
+    ]),
+  )
+  tray.on('click', showMainWindow)
+}
+
+// Tray commands run inside the web page: the shell has no IPC bridge into the
+// UI, so the command is dispatched as a DOM event handled by the
+// dsh-desktop-tray plugin, which calls the official client services
+// (workspaces.startSession / pickDirectory / create). The window is brought
+// to the foreground first so the user sees the new session / workspace.
+function sendTrayCommand(command) {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  showMainWindow()
+  if (!isBackendUrl(mainWindow.webContents.getURL())) return
+  void mainWindow.webContents
+    .executeJavaScript(
+      `window.dispatchEvent(new CustomEvent('dsh-desktop-tray-command', { detail: ${JSON.stringify(command)} }))`,
+    )
+    .catch(() => {})
+}
+
+// Update check runs in the main process against the same GitHub Releases
+// source the settings-page updater uses; the result lands in a native dialog
+// (the window is brought up first so the dialog is visible).
+async function checkForUpdates() {
+  showMainWindow()
+  const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined
+  const currentVersion = app.getVersion()
+  try {
+    const response = await electronNet.fetch(LATEST_RELEASE_URL, {
+      headers: { accept: 'application/vnd.github+json', 'user-agent': 'deepseek-harness-desktop' },
+      signal: AbortSignal.timeout(15_000),
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const release = await response.json()
+    const latestVersion = typeof release?.tag_name === 'string' ? release.tag_name : ''
+    if (latestVersion && isUpdateAvailable(currentVersion, latestVersion)) {
+      const { response: choice } = await dialog.showMessageBox(parent, buildUpdateFoundOptions(currentVersion, release))
+      if (choice === 0 && typeof release?.html_url === 'string') void shell.openExternal(release.html_url)
+    } else {
+      await dialog.showMessageBox(parent, buildUpToDateOptions(currentVersion))
+    }
+  } catch (error) {
+    await dialog.showMessageBox(
+      parent,
+      buildUpdateFailedOptions(error instanceof Error ? error.message : String(error)),
+    )
+  }
+}
+
+function applyCloseBehavior(behavior, remembered) {
+  if (remembered) saveCloseBehavior({ behavior, remembered: true })
+  else if (loadCloseBehavior().remembered) saveCloseBehavior({ behavior, remembered: false })
+  if (behavior === 'minimize') {
+    minimizeToTray()
+    // The notification shows only when the user checks 「记住我的选择」 with
+    // minimize (i.e. opts out of the dialog): it explains how to fully quit.
+    // Un-remembering and checking it again notifies once more; plain
+    // minimize-to-tray afterwards stays silent.
+    if (remembered) new Notification(MINIMIZE_TO_TRAY_NOTIFICATION).show()
+  } else {
+    mainWindow?.destroy()
+  }
+}
+
+async function askCloseBehavior() {
+  const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined
+  const remembered = loadCloseBehavior().remembered
+  const { response, checkboxChecked } = await dialog.showMessageBox(parent, buildCloseDialogOptions(remembered))
+  applyCloseBehavior(response === 0 ? 'minimize' : 'quit', checkboxChecked)
+}
+
 function configureNavigation(window) {
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (isBackendUrl(url)) return { action: 'allow' }
@@ -405,7 +610,12 @@ function configureNavigation(window) {
   // disabled, so the dialog's own header row stays fully clickable, and it
   // is restored when the dialog closes.
   window.webContents.on('did-finish-load', () => {
-    if (!isBackendUrl(window.webContents.getURL())) return
+    if (!isBackendUrl(window.webContents.getURL())) {
+      // The loading page follows the OS color scheme; the backend page below
+      // reports its own theme instead.
+      syncTitleBarOverlayFromNativeTheme(window)
+      return
+    }
     void window.webContents.executeJavaScript(`
       if (!document.getElementById('dsh-desktop-drag-style')) {
         const dragStyle = document.createElement('style')
@@ -444,33 +654,118 @@ function configureNavigation(window) {
         syncDragRegion()
       }
     `)
+    void window.webContents.executeJavaScript(`
+      if (!window.__dshTitlebarThemeObserver) {
+        const reportTitlebarTheme = () => {
+          console.log(
+            '${titleBarThemeMarker}' + (document.body.hasAttribute('data-ds-dark-theme') ? 'dark' : 'light'),
+          )
+        }
+        window.__dshTitlebarThemeObserver = new MutationObserver(reportTitlebarTheme)
+        window.__dshTitlebarThemeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] })
+        reportTitlebarTheme()
+      }
+    `)
+  })
+
+  // The backend page reports its theme through the console marker above; the
+  // Window Controls Overlay symbol color follows it. While the loading page
+  // is up (it follows the OS scheme), track OS theme changes too — once the
+  // backend page loads, its own report takes over.
+  // The completion-reminder plugin raises the desktop wake marker when a
+  // system notification is clicked: restore/focus the window (window.focus()
+  // in the renderer cannot unminimize), so the click always lands on the chat.
+  window.webContents.on('console-message', details => {
+    const message = details?.message
+    if (typeof message !== 'string') return
+    if (message.startsWith(desktopWakeMarker)) {
+      showMainWindow()
+      return
+    }
+    if (!message.startsWith(titleBarThemeMarker)) return
+    const dark = message.slice(titleBarThemeMarker.length).includes('dark')
+    syncTitleBarOverlay(window, dark ? titleBarSymbolDark : titleBarSymbolLight)
+  })
+
+  nativeTheme.on('updated', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (isBackendUrl(mainWindow.webContents.getURL())) return
+    syncTitleBarOverlayFromNativeTheme(mainWindow)
   })
 }
 
 async function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
+  // The loading page follows the OS color scheme (loading.html), so the
+  // initial background and window-control glyph colors do too; once the
+  // backend page loads, its own theme report takes over.
+  const systemDark = nativeTheme.shouldUseDarkColors
+  // Restore the window geometry remembered from the previous run; bounds are
+  // validated against the current displays, so a window saved on a monitor
+  // that is no longer connected falls back to the defaults below.
+  const savedWindowState = loadWindowState()
+  const windowOptions = {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    backgroundColor: '#f7f8fa',
+    // Matches loading.html which mirrors the official boot screen tokens
+    // (--dsw-alias-bg-base: #ffffff light / #151517 dark).
+    backgroundColor: systemDark ? '#151517' : '#ffffff',
     icon: path.join(shellDirectory, 'assets', 'icon.png'),
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#00000000',
-      symbolColor: '#22252b',
-      height: 38,
+      ...titleBarOverlayOptions,
+      symbolColor: systemDark ? titleBarSymbolDark : titleBarSymbolLight,
     },
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
-  })
+  }
+  if (savedWindowState?.bounds) {
+    Object.assign(windowOptions, savedWindowState.bounds)
+  } else {
+    windowOptions.width = 1280
+    windowOptions.height = 800
+  }
+  mainWindow = new BrowserWindow(windowOptions)
   configureNavigation(mainWindow)
-  mainWindow.once('ready-to-show', () => mainWindow?.show())
+  // Closing the window stops the local backend and its reserved port, which
+  // changes the Web address on next launch. Unless the user chose to fully
+  // quit (and remembered it), the window minimizes to the tray instead; the
+  // tray menu's 退出 is the only way to fully quit while minimized.
+  mainWindow.on('close', event => {
+    if (quitting) return
+    const config = loadCloseBehavior()
+    if (config.remembered && config.behavior === 'minimize') {
+      event.preventDefault()
+      minimizeToTray()
+      return
+    }
+    if (config.remembered) return
+    event.preventDefault()
+    void askCloseBehavior()
+  })
+  // Persist the window geometry (bounds + maximized / full-screen flags) on
+  // any change, debounced; a final flush happens in before-quit.
+  let windowStatePending = false
+  const scheduleWindowStateSave = () => {
+    if (windowStatePending) return
+    windowStatePending = true
+    setTimeout(() => {
+      windowStatePending = false
+      saveWindowState()
+    }, 300)
+  }
+  for (const eventName of ['resize', 'move', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
+    mainWindow.on(eventName, scheduleWindowStateSave)
+  }
+  mainWindow.once('ready-to-show', () => {
+    if (savedWindowState?.isFullScreen) mainWindow?.setFullScreen(true)
+    else if (savedWindowState?.isMaximized) mainWindow?.maximize()
+    mainWindow?.show()
+  })
   await mainWindow.loadFile(path.join(shellDirectory, 'loading.html'))
 }
 
@@ -534,10 +829,7 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) app.quit()
 
 app.on('second-instance', () => {
-  if (!mainWindow) return
-  if (mainWindow.isMinimized()) mainWindow.restore()
-  mainWindow.show()
-  mainWindow.focus()
+  showMainWindow()
 })
 
 app.whenReady().then(async () => {
@@ -565,5 +857,7 @@ app.on('window-all-closed', () => app.quit())
 app.on('before-quit', () => {
   if (quitting) return
   quitting = true
+  saveWindowState()
+  tray?.destroy()
   stopBackend()
 })

@@ -46,6 +46,8 @@ window.__ModuleLoader__.load({
       settingsDrawer: true,
       sessionLogExport: true,
       statsLine: true,
+      openWorkspace: true,
+      chatPolish: true,
     };
     /** Feature keys in stable order (also the settings-card row order). */
     const dduiConfigKeys = Object.keys(dduiDefaultConfig);
@@ -101,7 +103,7 @@ window.__ModuleLoader__.load({
       return () => tag.remove();
     };
     const css =
-      ".dshDesktopUi_trigger{min-height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:0;border-radius:6px;align-items:center;gap:3px;padding:3px 2px;font-size:12px;line-height:18px;display:inline-flex}.dshDesktopUi_trigger:hover:not(:disabled),.dshDesktopUi_trigger:focus-visible{color:var(--dsw-alias-label-secondary)}.dshDesktopUi_trigger:disabled{color:var(--dsw-alias-label-dimmed);cursor:wait}.dshDesktopUi_trigger svg,.dshDesktopUi_trigger span{flex:none}.dshDesktopUi_trigger span{white-space:nowrap}";
+      ".dshDesktopUi_trigger{box-sizing:border-box;min-height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:0;border-radius:6px;align-items:center;gap:4px;padding:0 8px;font-size:12px;line-height:20px;white-space:nowrap;display:inline-flex}.dshDesktopUi_trigger:hover:not(:disabled),.dshDesktopUi_trigger:focus-visible{color:var(--dsw-alias-label-secondary)}.dshDesktopUi_trigger:disabled{color:var(--dsw-alias-label-dimmed);cursor:wait}.dshDesktopUi_trigger svg,.dshDesktopUi_trigger span{flex:none}";
     const tagId = "dsh-desktop-ui/HeaderAction.module.css";
     const installHeaderActionCss = () => dduiInstallCss(css, tagId);
     //#endregion
@@ -235,17 +237,42 @@ window.__ModuleLoader__.load({
     }
     //#endregion
     //#region lib/client/stats-line.js
-    // 统计行样式：输入框下方统计信息占满整行居中、不截断
+    // 统计行样式：输入框下方统计信息占满整行居中，不换行，超出以省略号收尾
     /** Bottom stats line (conversation.composer.dock / StatsLine): use the whole
-		dock width instead of the chat column, stay centered, and wrap instead of
-		truncating with an ellipsis. The primary selector is the slot outlet's
-		stable `data-slot` attribute (every slot renders a `<div data-slot=...>`);
-		the hashed `.FJxK0a_root` module class is kept as a fallback in case the
-		outlet markup ever changes. */
+		dock width instead of the chat column, stay centered, never wrap, and end
+		with an ellipsis when the line overflows. The primary selector is the slot
+		outlet's stable `data-slot` attribute (every slot renders a
+		`<div data-slot=...>`); the hashed `.FJxK0a_root` module class is kept as
+		a fallback in case the outlet markup ever changes. */
     const statsCss =
-      'div[data-slot="conversation.composer.dock"]>div,.FJxK0a_root{box-sizing:border-box;width:100%!important;max-width:none!important;margin:0 auto!important;text-align:center!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important}';
+      'div[data-slot="conversation.composer.dock"]>div,.FJxK0a_root{box-sizing:border-box;width:100%!important;max-width:none!important;margin:0 auto!important;text-align:center!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}';
     const statsTagId = "dsh-desktop-ui/StatsLine.module.css";
     const installStatsCss = () => dduiInstallCss(statsCss, statsTagId);
+    //#endregion
+    //#region lib/client/chat-polish.js
+    // 聊天界面微调：思考文案限高 + 「载入历史」提示居中
+    /** Reasoning text is clamped to ~10 lines with an internal scroll; the
+		「载入历史…」 hint inside the chat flow is centered. The reasoning block
+		carries the stable `data-variant="think"` attribute and its body class
+		always ends in `thinkBody` (CSS-module suffix); the history hint is the
+		first child of the `[data-chat-flow]` column while loading (class suffix
+		`_hint`, scoped so the composer command hint is not affected). */
+    const chatPolishCss =
+      '[data-variant="think"] [class*="thinkBody"]{max-height:240px;overflow-y:auto}[data-chat-flow]>div:first-child[class$="_hint"]{text-align:center!important;padding:8px 0}';
+    const chatPolishTagId = "dsh-desktop-ui/ChatPolish.module.css";
+    const installChatPolishCss = () => dduiInstallCss(chatPolishCss, chatPolishTagId);
+    //#endregion
+    //#region lib/client/open-workspace.js
+    // Header 操作区（打开工作区 / 导出会话）：钉在页签行右端
+    /** Header utilities (open workspace / session log) dock to the tab-row
+		right end: the utilities container is the last child of the title row
+		(the first child of the header), so it is lifted out and pinned to the
+		header's bottom-right corner — exactly beside the tabs. Shared by the
+		sessionLogExport and chatPolish features (idempotent by style tag). */
+    const utilitiesCss =
+      '[data-slot="conversation.session.header"] header{position:relative}[data-slot="conversation.session.header"] header>div:first-child>div:last-child{position:absolute;right:0;bottom:0;z-index:2;align-items:center;gap:8px;margin-left:0;display:flex}';
+    const utilitiesTagId = "dsh-desktop-ui/HeaderUtilities.module.css";
+    const installUtilitiesCss = () => dduiInstallCss(utilitiesCss, utilitiesTagId);
     //#endregion
     //#endregion
     //#region lib/client/Dialog.js
@@ -299,7 +326,7 @@ window.__ModuleLoader__.load({
     }
     //#endregion
     //#region lib/client/HeaderAction.js
-    // 「导出会话」按钮：会话标题旁的文字按钮 + 下载对话框
+    // 「导出会话」按钮：页签行右端的文字按钮 + 下载对话框
     /** Ghost-text header action (icon first) plus the shared download dialog. */
     function ExportMoveHeaderAction(props) {
       const { sessionId, useSessionLogDownload, request, t } = props;
@@ -330,6 +357,41 @@ window.__ModuleLoader__.load({
         ],
       });
     }
+    /**
+     * 「打开工作区」按钮：以资源管理器方式打开当前工作区。当前工作区 = 包含
+     * 当前会话的工作区（与官方 startSession 的判定一致），找不到时退回第一个
+     * 工作区；路径由官方 workspaces.openPath 交给系统打开（桌面插件的包装会
+     * 放行目录）。
+     */
+    function OpenWorkspaceHeaderAction({ workspaces, sessions, t }) {
+      const openCurrentWorkspace = () => {
+        const items = workspaces.list.getSnapshot().items;
+        const current = sessions.list.getSnapshot().current;
+        const workspace =
+          items.find(
+            (item) =>
+              Array.isArray(item.sessionIds) && item.sessionIds.includes(current),
+          ) ?? items[0];
+        const path = workspace?.path;
+        if (typeof path !== "string" || path === "") return;
+        workspaces.openPath(path).catch(() => {});
+      };
+      return (0, react_jsx_runtime.jsxs)("button", {
+        type: "button",
+        className: "dshDesktopUi_trigger",
+        title: t("openWorkspace.tooltip"),
+        onClick: openCurrentWorkspace,
+        children: [
+          (0, react_jsx_runtime.jsx)(
+            _deepseek_ai_dsh_client_ui_primitives.IconFolderOpenOutline16,
+            { size: 12 },
+          ),
+          (0, react_jsx_runtime.jsx)("span", {
+            children: t("openWorkspace"),
+          }),
+        ],
+      });
+    }
     //#endregion
     //#region lib/client/locales.js
     // 中英文案词典（命名空间 NS = "desktop-ui"）
@@ -337,6 +399,8 @@ window.__ModuleLoader__.load({
     const NS = "desktop-ui";
     const zh = {
       "trigger.label": "导出会话",
+      "openWorkspace": "打开工作区",
+      "openWorkspace.tooltip": "在资源管理器中打开当前工作区",
       "dialog.preparingTitle": "正在导出 Session",
       "dialog.preparingDescription":
         "正在准备包含当前 Session、子 Session 和附件的 ZIP 文件。",
@@ -360,12 +424,21 @@ window.__ModuleLoader__.load({
       "config.settingsDrawer.desc": "打开设置时从左侧滑出面板，取代居中的弹窗",
       "config.sessionLogExport": "会话日志导出",
       "config.sessionLogExport.desc":
-        "在会话标题旁显示「导出会话」按钮，一键打包当前会话",
+        "在页签行右侧显示「导出会话」按钮（中文），一键打包当前会话",
       "config.statsLine": "统计栏",
-      "config.statsLine.desc": "输入框下方的统计信息占满整行居中显示，不被截断",
+      "config.statsLine.desc":
+        "输入框下方的统计信息占满整行居中显示，超出部分以省略号收尾",
+      "config.openWorkspace": "打开工作区按钮",
+      "config.openWorkspace.desc":
+        "在页签行右侧显示「打开工作区」按钮，以资源管理器方式打开当前工作区",
+      "config.chatPolish": "聊天界面微调",
+      "config.chatPolish.desc":
+        "思考文案限高可滚动；「载入历史…」提示居中显示",
     };
     const en = {
       "trigger.label": "Session log",
+      "openWorkspace": "Open workspace",
+      "openWorkspace.tooltip": "Open the current workspace in Explorer",
       "dialog.preparingTitle": "Exporting Session",
       "dialog.preparingDescription":
         "Preparing a ZIP containing this Session, its sub-Sessions, and attachments.",
@@ -392,10 +465,16 @@ window.__ModuleLoader__.load({
         "Open settings as a slide-in panel from the left instead of a centered modal",
       "config.sessionLogExport": "Session log export",
       "config.sessionLogExport.desc":
-        "Show an Export Session button next to the session title to package the session in one click",
+        "Show the localized Export Session button at the tab-row right end",
       "config.statsLine": "Stats line",
       "config.statsLine.desc":
-        "Show the stats row under the input full-width and centered, without truncation",
+        "Show the stats row under the input full-width and centered, with an ellipsis for overflow",
+      "config.openWorkspace": "Open workspace button",
+      "config.openWorkspace.desc":
+        "Show an Open workspace button at the tab-row right end to open the current workspace in Explorer",
+      "config.chatPolish": "Chat polish",
+      "config.chatPolish.desc":
+        "Clamp the reasoning text height with a scroll; center the loading-history hint",
     };
     //#endregion
     //#region lib/client/config-card.js
@@ -405,6 +484,16 @@ window.__ModuleLoader__.load({
       ".dduiC_card{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;list-style:none;transition:border-color .16s,background .16s}.dduiC_card:hover{border-color:var(--dsw-alias-label-dimmed)}.dduiC_cardOpen{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-label-dimmed)}.dduiC_header{appearance:none;width:100%;font:inherit;color:inherit;text-align:left;cursor:pointer;background:0 0;border:0;border-radius:12px;align-items:center;gap:12px;padding:14px 16px;display:flex}.dduiC_header:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}.dduiC_headText{flex-direction:column;flex:1;gap:4px;min-width:0;display:flex}.dduiC_name{color:var(--dsw-alias-label-primary);font-size:15px;font-weight:600;line-height:1.4}.dduiC_description{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}.dduiC_chevron{color:var(--dsw-alias-label-tertiary);flex:none;transition:transform .16s}.dduiC_chevronOpen{transform:rotate(180deg)}.dduiC_body{border-top:1px solid var(--dsw-alias-border-l2);margin:0 16px;padding-bottom:8px}.dduiC_field{flex-direction:column;gap:6px;padding:12px 0;display:flex}.dduiC_field+.dduiC_field{border-top:1px solid var(--dsw-alias-border-l2)}.dduiC_head{align-items:center;gap:8px;display:flex}.dduiC_label{min-width:0;color:var(--dsw-alias-label-primary);flex:1;font-size:13px;font-weight:500;line-height:1.5}.dduiC_badges{align-items:center;gap:8px;display:inline-flex}.dduiC_badge{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px}.dduiC_badgeMuted{white-space:nowrap;color:var(--dsw-alias-label-tertiary);border-radius:999px;padding:1px 8px;font-size:11px;line-height:17px}.dduiC_switch{accent-color:var(--dsw-alias-brand-primary);flex:none;width:16px;height:16px;margin:0;cursor:pointer}.dduiC_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}.dduiC_footer{border-top:1px solid var(--dsw-alias-border-l2);justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px;display:flex}.dduiC_failed{min-width:0;color:var(--dsw-alias-label-error);flex:1;margin:0;font-size:12px;line-height:1.5}.dduiC_discard,.dduiC_save{appearance:none;font:inherit;cursor:pointer;border:1px solid #0000;border-radius:8px;padding:5px 14px;font-size:13px;line-height:1.5}.dduiC_discard{border-color:var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);background:0 0}.dduiC_discard:hover:not(:disabled){color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-dimmed)}.dduiC_save{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}.dduiC_discard:disabled,.dduiC_save:disabled{opacity:.4;cursor:default}.dduiC_discard:focus-visible,.dduiC_save:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}";
     const configCardTagId = "dsh-desktop-ui/ConfigCard.module.css";
     dduiInstallCss(configCardCss, configCardTagId);
+    /**
+     * 官方 dsh-session-log-export 的导出按钮（英文 "Session log" 胶囊）由本插件
+     * 的中文「导出会话」按钮替代，常驻隐藏官方按钮（无论开关状态，避免英文
+     * 按钮与开关语义冲突）；本插件的按钮注册在独立 id 下，与官方不冲突。
+     * 官方按钮的 CSS-module 类名后缀稳定为 sessionLogButton。
+     */
+    const hideOfficialSessionLogCss =
+      '[data-slot="conversation.session.header.utilities"] [class*="sessionLogButton"]{display:none!important}';
+    const hideOfficialSessionLogTagId = "dsh-desktop-ui/HideOfficialSessionLog.module.css";
+    dduiInstallCss(hideOfficialSessionLogCss, hideOfficialSessionLogTagId);
     /** Settings card editing the desktop-ui feature switches (reads/writes the host config API). DOM mirrors the official plugin-configuration card: header (name + description + pending badge + chevron), fields (label + status badge + control + hint), footer (failed note + reset + save). */
     function DesktopUiConfigCard({ t }) {
       const [state, setState] = react.useState({
@@ -654,6 +743,7 @@ window.__ModuleLoader__.load({
         }
         if (config.sessionLogExport) {
           install(() => installHeaderActionCss());
+          install(() => installUtilitiesCss());
           const controller = ctx.get("sessionLogDownload");
           if (controller !== void 0) {
             install(() =>
@@ -661,19 +751,7 @@ window.__ModuleLoader__.load({
                 ctx.slots.register(
                   {
                     name: "conversation.session.header.utilities",
-                    id: "session-log-download",
-                    priority: -1,
-                  },
-                  () => null,
-                ),
-              ),
-            );
-            install(() =>
-              ctx.slots.inject("conversation.session.header.actions", () =>
-                ctx.slots.register(
-                  {
-                    name: "conversation.session.header.actions",
-                    id: "session-log-download",
+                    id: "dsh-desktop-ui-session-log-download",
                     order: 30,
                     locale: NS,
                     inject: () => ({
@@ -689,6 +767,30 @@ window.__ModuleLoader__.load({
               ),
             );
           }
+        }
+        if (config.openWorkspace) {
+          install(() => installUtilitiesCss());
+          install(() => installHeaderActionCss());
+          install(() =>
+            ctx.slots.inject("conversation.session.header.utilities", () =>
+              ctx.slots.register(
+                {
+                  name: "conversation.session.header.utilities",
+                  id: "open-workspace",
+                  order: 20,
+                  locale: NS,
+                  inject: () => ({
+                    workspaces: ctx.get("workspaces"),
+                    sessions: ctx.get("sessions"),
+                  }),
+                },
+                OpenWorkspaceHeaderAction,
+              ),
+            ),
+          );
+        }
+        if (config.chatPolish) {
+          install(() => installChatPolishCss());
         }
         if (config.statsLine) {
           install(() => installStatsCss());

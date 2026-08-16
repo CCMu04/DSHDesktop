@@ -194,12 +194,14 @@ window.__ModuleLoader__.load({
         const onKeyDown = (event) => {
           if (event.key === "Escape") hideFloatingMenu();
         };
-        const onScroll = () => hideFloatingMenu();
+        // 只保留 Escape 关闭。**不做 scroll 关闭**：菜单是 position:fixed，
+        // 任何滚动都不影响它的位置（平台惯例：桌面应用右键菜单不随滚动
+        // 关闭）；且实测真实滚动事件不会传播到 window/document 的 capture
+        // 监听，只有合成 scroll 事件会触发——该路径只会误伤（如未来官方
+        // 派发合成 scroll 事件时把菜单关掉），没有收益。
         document.addEventListener("keydown", onKeyDown, true);
-        document.addEventListener("scroll", onScroll, true);
         return () => {
           document.removeEventListener("keydown", onKeyDown, true);
-          document.removeEventListener("scroll", onScroll, true);
         };
       }, [menu]);
       if (menu === null) return null;

@@ -8,7 +8,8 @@
  *     approval / 提问 question）；
  *   - 上述事件发生瞬间窗口不在前台（document.hasFocus() 为 false，覆盖
  *     失焦/最小化）时，用系统通知（HTML5 Notification → Windows 右下角
- *     toast）提醒；点击通知把窗口带回前台；
+ *     toast）提醒；点击通知把窗口带回前台并跳转到该通知对应的聊天窗口
+ *     （sessions.open 切换当前会话）；
  *   - 「功能增强」卡片子项（desktop.features.item）数据接口：启用/停用。
  *
  * 开关由 host 端持久化（/api/desktop-notify/config）。
@@ -23,6 +24,8 @@ window.__ModuleLoader__.load({
     //#region 配置工具
     /** 功能开关默认值。 */
     const ddnDefaultConfig = { enabled: true };
+    /** 主进程唤醒标记（main.mjs 的 console-message 监听识别后恢复窗口）。 */
+    const desktopWakeMarker = "__DSH_DESKTOP_WAKE__:";
     /** 读取生效配置；任何失败回退默认（开启）。 */
     function loadNotifyConfig() {
       return fetch("/api/desktop-notify/config", {
@@ -149,7 +152,7 @@ window.__ModuleLoader__.load({
         }
       };
 
-      const showNotification = (title, body) => {
+      const showNotification = (title, body, sessionId) => {
         let notice;
         try {
           notice = new Notification(title, { body });
@@ -157,9 +160,24 @@ window.__ModuleLoader__.load({
           return;
         }
         notice.onclick = () => {
+          // 点击通知：把窗口带回前台，并跳转到该通知对应的聊天窗口
+          // （sessions.open 切换官方当前会话；通知发出时可能已切到
+          // 别的会话，必须显式跳回）。
           try {
             window.focus();
           } catch {}
+          // 最小化时渲染进程 window.focus() 无法恢复窗口：console 标记
+          // 请求主进程 restore+show+focus（main.mjs 监听该标记）。
+          try {
+            console.log(desktopWakeMarker + (sessionId ?? ""));
+          } catch {}
+          if (typeof sessionId === "string" && sessionId !== "") {
+            try {
+              sessions.open(sessionId);
+            } catch {
+              // 会话已不存在等场景忽略（窗口已带回前台）。
+            }
+          }
         };
       };
 
@@ -176,7 +194,7 @@ window.__ModuleLoader__.load({
               ? t("notify.empty")
               : truncate(preview, ddnPreviewLimit);
         }
-        showNotification(t("notify.title"), body);
+        showNotification(t("notify.title"), body, currentId);
       };
 
       /** AI 调起询问（审批 / 提问）时的通知正文。 */
@@ -215,7 +233,7 @@ window.__ModuleLoader__.load({
 
       const maybeNotifyPending = (pending) => {
         const content = pendingNotificationBody(pending);
-        showNotification(content.title, content.body);
+        showNotification(content.title, content.body, currentId);
       };
 
       const onSessionChange = () => {

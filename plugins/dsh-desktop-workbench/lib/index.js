@@ -32,6 +32,24 @@ const LAYOUT_MAX_SESSIONS = 200;
 const LAYOUT_MAX_BYTES = 32 * 1024;
 const LAYOUT_MAX_SESSION_LENGTH = 128;
 
+/**
+ * Global preference schema (non-session state persisted across restarts):
+ *   files.treeCollapsed — 文件面板目录树显隐
+ *   files.treeWidth     — 文件面板目录树宽度
+ *   git.listWidth       — Git 面板文件列表宽度
+ *   git.historyHeight   — Git 面板历史区高度
+ * Keys are whitelisted; unknown keys are dropped. localStorage is NOT usable
+ * for these: the backend port changes every launch, so the web origin (and
+ * with it the entire localStorage) changes too.
+ */
+const PREFS_SCHEMA = Object.freeze({
+  "files.treeCollapsed": { type: "boolean" },
+  "files.treeWidth": { type: "number", min: 100, max: 280 },
+  "git.listWidth": { type: "number", min: 140, max: 420 },
+  "git.historyHeight": { type: "number", min: 64, max: 320 },
+});
+const PREFS_MAX_BYTES = 4 * 1024;
+
 /** Resolve the persistence directory ($DSH_HOME or ~/.dsh). */
 function workbenchHomeDir() {
   return process.env.DSH_HOME?.trim()
@@ -56,7 +74,12 @@ function readLayoutStore() {
   return raw;
 }
 
-/** Narrow an unknown layout payload to the fields we own. */
+/**
+ * Narrow an unknown layout payload to the fields we own. Null values are kept
+ * and mean "clear this field" (merge semantics: the session layout is merged
+ * with the incoming payload, so the workbench frame and feature plugins each
+ * update only their own fields without clobbering each other).
+ */
 function narrowLayout(value) {
   if (typeof value !== "object" || value === null) return null;
   const out = {};
@@ -67,11 +90,31 @@ function narrowLayout(value) {
       Math.max(LAYOUT_MIN_WIDTH, Math.round(value.width)),
     );
   }
-  if (typeof value.activeTabId === "string" && value.activeTabId.length > 0) {
-    out.activeTabId = value.activeTabId.slice(0, LAYOUT_MAX_SESSION_LENGTH);
+  for (const field of ["activeTabId", "file", "repo"]) {
+    if (value[field] === null) {
+      out[field] = null;
+    } else if (typeof value[field] === "string" && value[field].length > 0) {
+      out[field] = value[field].slice(
+        0,
+        field === "file" ? 4096 : LAYOUT_MAX_SESSION_LENGTH,
+      );
+    }
   }
-  if (typeof value.file === "string" && value.file.length > 0) {
-    out.file = value.file.slice(0, 4096);
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/** Narrow a prefs payload against the whitelist schema; unknown keys dropped. */
+function narrowPrefs(value) {
+  if (typeof value !== "object" || value === null) return null;
+  const out = {};
+  for (const [key, spec] of Object.entries(PREFS_SCHEMA)) {
+    const raw = value[key];
+    if (raw === undefined || raw === null) continue;
+    if (spec.type === "boolean") {
+      if (typeof raw === "boolean") out[key] = raw;
+    } else if (typeof raw === "number" && Number.isFinite(raw)) {
+      out[key] = Math.min(spec.max, Math.max(spec.min, Math.round(raw)));
+    }
   }
   return Object.keys(out).length > 0 ? out : null;
 }
@@ -134,9 +177,10 @@ function queryParam(url, key) {
 }
 
 /**
- * 注册两条路由（都是 kind: exact，路径不同，无重复冲突）：
+ * 注册三条路由（都是 kind: exact，路径不同，无重复冲突）：
  *   /api/desktop-workbench/config   — 框架开关 GET/HEAD/POST
- *   /api/desktop-workbench/layout   — 会话布局 GET/HEAD/POST
+ *   /api/desktop-workbench/layout   — 会话布局 GET/HEAD/POST（merge 语义）
+ *   /api/desktop-workbench/prefs    — 全局偏好 GET/HEAD/POST（文件/Git 插件状态）
  */
 export function apply(ctx, config = {}) {
   const patchLayer =
@@ -261,7 +305,9 @@ export function apply(ctx, config = {}) {
             }
             const store = readLayoutStore();
             const layouts = { ...(store.layouts ?? {}) };
-            layouts[session] = layout;
+            // Merge semantics: the frame and feature plugins each persist their
+            // own fields; null values clear the previous field.
+            layouts[session] = { ...(layouts[session] ?? {}), ...layout };
             // Bound the store: drop oldest entries beyond the cap (insertion
             // order of a plain object is preserved for string keys).
             const keys = Object.keys(layouts);
@@ -271,7 +317,71 @@ export function apply(ctx, config = {}) {
               }
             }
             writeLayoutStore({ ...store, layouts });
-            json(res, 200, { ok: true, layout });
+            json(res, 200, { ok: true, layout: layouts[session] });
+          },
+          (error) => {
+            json(res, 400, {
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          },
+        );
+        return;
+      }
+      json(res, 405, { ok: false, error: "method-not-allowed" });
+    },
+  };
+
+  const prefsRoute = {
+    kind: "exact",
+    path: "/api/desktop-workbench/prefs",
+    handler: (req, res) => {
+      if (req.method === "GET" || req.method === "HEAD") {
+        const store = readLayoutStore();
+        const body = JSON.stringify({ prefs: store.prefs ?? {} });
+        res.writeHead(200, {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": String(Buffer.byteLength(body)),
+          "cache-control": "no-cache",
+        });
+        if (req.method === "HEAD") {
+          res.end();
+          return;
+        }
+        res.end(body);
+        return;
+      }
+      if (req.method === "POST") {
+        readJsonBody(req).then(
+          (body) => {
+            const rawPrefs = body?.prefs;
+            if (
+              typeof rawPrefs !== "object" ||
+              rawPrefs === null
+            ) {
+              json(res, 400, { ok: false, error: "prefs-invalid" });
+              return;
+            }
+            if (
+              Buffer.byteLength(JSON.stringify(rawPrefs)) > PREFS_MAX_BYTES
+            ) {
+              json(res, 400, { ok: false, error: "prefs-too-large" });
+              return;
+            }
+            const prefs = narrowPrefs(rawPrefs);
+            if (prefs === null) {
+              json(res, 400, { ok: false, error: "prefs-invalid" });
+              return;
+            }
+            const store = readLayoutStore();
+            writeLayoutStore({
+              ...store,
+              prefs: { ...(store.prefs ?? {}), ...prefs },
+            });
+            json(res, 200, {
+              ok: true,
+              prefs: { ...(store.prefs ?? {}), ...prefs },
+            });
           },
           (error) => {
             json(res, 400, {
@@ -289,9 +399,11 @@ export function apply(ctx, config = {}) {
   ctx.effect(() => {
     const disposeConfig = ctx.webServer.register(configRoute);
     const disposeLayout = ctx.webServer.register(layoutRoute);
+    const disposePrefs = ctx.webServer.register(prefsRoute);
     return () => {
       disposeConfig();
       disposeLayout();
+      disposePrefs();
     };
-  }, "dsh-desktop-workbench: config and layout routes");
+  }, "dsh-desktop-workbench: config, layout and prefs routes");
 }

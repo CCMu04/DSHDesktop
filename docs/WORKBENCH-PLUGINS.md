@@ -30,25 +30,29 @@ better-sidebar 把「侧边栏框架 + 7 个 Tab + 6 种文件预览器」塞进
 
 > ✅ 已实现并定稿（`plugins/dsh-desktop-workbench/`）。落地形态见下。
 
-- **形态：官方布局的右侧分栏（grid 第四列），非浮层抽屉**。官方 AppFrame 是三栏 grid（`sidebar | 对话 | details`），details 列已被官方工具详情面板占用（single 槽不可共挂），因此工作台以 **CSS 变量接管渲染值** 的方式接入：注入规则 `div[style*="grid-template-columns"]{grid-template-columns:var(--ddwb-grid-template, <官方三列>) !important}`，实际模板由变量决定，React 只写 inline 三列、与工作台轨道完全解耦（React 重渲染不再导致列闪没）；列 div 作为 grid item（`grid-column: 4 / grid-row: 1`）挂载；styleObserver 仅在 React 重写 inline 模板时同步变量（lastSynced 短路防循环），childList 观察器在 React 收敛子节点时自愈重挂。官方三列原样保留。
-- **UI**：header 两行结构，垂直节奏与官方 header 完全一致——第一行 titleRow（min-height 32px）显示「工作台」标题（14px/500、`label-secondary`，padding-left 28px 与第一个 tab 对齐），第二行 tabsRow：左右**常驻滚动按钮**（22px，无溢出时 disabled 灰显，溢出时可点平滑滚动；tab 栏隐藏滚动条）包夹 tab 栏（gap 16px，官方同款 13px/500 下划线式 tab）；**tab 顶 48px 与官方「对话 / 轨迹」页签精确对齐**。header 水平 padding 8px（官方 20/28 是为面包屑/utilities 服务，本列无这些内容）。
-- **默认关闭**：新会话首次出现只有右侧细条按钮（body portal），点击展开；已保存布局的会话按保存状态恢复。宽度与激活 tab 按会话经 `/api/desktop-workbench/layout` 持久化。
-- **拖拽调宽**：列左边缘 8px 常驻拖拽条（hover/拖拽时竖线变 `--dsw-alias-brand-primary`、背景 `--dsw-alias-interactive-bg-hover`）；拖拽期间给 frame 加官方 `data-dragging` 属性关掉 `grid-template-columns` transition（不跟手根因），rAF 节流直接写 CSS 变量、不经过 React state，防抖持久化，钳制 240–720；**拖到 <200px 自动收起**（含快速拖放边界），无位移按下释放 = 点击收起。header 为窗口拖拽区（drag）、tab/按钮/拖拽条 no-drag。
+- **形态：对话页内部右侧分栏（chat 视图内 grid 分栏）**。工作台作为官方对话页根（`[data-phase]`）的第二列挂载、与 scrollBody 平级——位于聊天界面对话页的右边、官方「对话 / 轨迹」页签栏下方；**只有对话页签激活时显示**（conversation.view 槽位按激活视图渲染，切换到轨迹页签时 ChatView 卸载，工作台隐藏，切回对话页恢复）。列不在滚动容器内：聊天文本区滚动条留在其右缘、工作台滚轮只滚动自身内容；列高由 grid 第二行 stretch 决定，撑满对话区视口；列顶是紧凑页签栏（文件 / Git …），**不显示「工作台」标题字样**，页签栏不与官方页签行对齐，也无关闭按钮（收起统一走 [|] 按钮）。
+- **打开方式：官方 Header 页签行右端的 [|] 按钮**。工作台在 `conversation.session.header.utilities` 槽位注册 `workbench-toggle`（order 35，与打开工作区 / 导出会话按钮同排同风格），使用官方 `IconPanelLeftOutline16` 水平翻转（右侧面板样式）；点击切换开合，打开时按钮高亮（品牌色）。无右侧细条按钮。
+- **拖拽调宽**：列左缘 8px 透明热区（视觉上就是聊天区与工作台之间的分割线），拖动期间给对话页根加 `data-ddwb-dragging` 禁用官方布局过渡（实时跟手）；不做点击收起、窄拖自动收起；钳制 240–720，防抖持久化。
 - **服务**：`ctx.provide('desktop.workbench', service)`，消费方 `inject: ['desktop.workbench']`：
 
 ```js
-service.registerTab({ id, title, order, component, badge })  // 注册面板页（主页签），返回 disposer
-service.registerViewer({ id, title, order, extensions, component })  // 注册预览器，返回 disposer
-service.activateTab(id)     // 激活功能 tab（已知 id 才分发）
-service.updateTab(id, patch) // 原位更新 tab 描述（如角标）
-service.openFile(path)      // 请求打开文件（路由到匹配 viewer；由功能插件决定如何呈现）
-service.closeFile(path)     // 关闭文件（未匹配为安全 no-op）
-service.getSnapshot()       // { tabs, viewers }（按 order 排序）
+service.registerTab({ id, title, order, component, icon, badge }) // 注册面板页签，返回 disposer
+service.registerViewer({ id, title, extensions, order, component }) // 注册文件预览器（按扩展名匹配）
+service.activateTab(id)      // 激活页签（切换内容区，同时打开面板）
+service.updateTab(id, patch) // 原位更新页签描述（如角标）
+service.openFile(path)       // 按扩展名路由到第一个匹配的 viewer
+service.closeFile()          // 关闭当前打开的文件，回到页签视图
+service.collapse()           // 收起面板（轨道归 0）
+service.toggle()             // 切换开合（Header [|] 按钮）
+service.setOpen(value)       // 打开/收起面板
+service.isOpen()             // 当前开合状态
+service.onOpenChange(listener) // 订阅开合状态
+service.getSnapshot()        // { tabs, viewers }（按 order 排序）
 service.subscribe(listener) / service.onAction(handler)  // 均返回 disposer
 ```
 
-- **主页签栏只承载功能页签**（文件 / 终端 / Git / 浏览器 / 任务，由各功能插件注册；框架自身不内置任何页签）。打开的文件**不在主页签栏显示**——由功能插件在自己的页签内容区内实现子页签（如 files 插件的文件子页签分页预览）。`openFile` / `registerViewer` 为对外契约（供未来生态使用），当前 files 插件在内部实现文件预览，不占用主页签。
-
+- **主页签栏只承载功能页签**（文件 / Git 等，由各功能插件注册；框架自身不内置任何页签）。打开的文件**不在主页签栏显示**——由功能插件在自己的页签内容区内实现子页签（如 files 插件的文件子页签分页预览）。`openFile` / `registerViewer` 为对外契约（供未来生态使用），当前 files 插件在内部实现文件预览，不占用主页签。
+- 开合状态由服务持有（Header 按钮与列组件共享），视图切换后重新挂载时恢复；**切换会话自动关闭工作台并重置页签/文件内容**（避免不同会话/项目内容串扰）；框架关闭（enabled=false）时列不挂载、按钮不注册；会话级布局（开合 / 宽度）按会话经 `/api/desktop-workbench/layout` 持久化，会话加载时默认收起以避免插件初始化竞态。
 - **host**：`/api/desktop-workbench/config`（框架总开关，走 §4 通用约定）+ `/api/desktop-workbench/layout`（GET/POST 会话布局持久化到 `$DSH_HOME/desktop-workbench.json`，与开关共用同一文件、原子写入；宽度钳制 240–720、每会话布局 ≤ 32 KiB、最多 200 个会话）。
 - Tab 组件渲染时收到 `{ ctx, service, t }`，viewer 组件收到 `{ path, t }`；`t` 为工作台词典的翻译函数。
 

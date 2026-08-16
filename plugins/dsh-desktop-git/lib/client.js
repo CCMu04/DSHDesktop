@@ -97,9 +97,66 @@ window.__ModuleLoader__.load({
     const ddgitRetryLimit = 20;
     /** 历史条数。 */
     const ddgitLogLimit = 20;
-    /** 分栏尺寸记忆 key（localStorage）。 */
-    const LIST_WIDTH_KEY = "dsh-desktop-git:listWidth";
-    const HISTORY_HEIGHT_KEY = "dsh-desktop-git:historyHeight";
+    /**
+     * 偏好持久化：
+     *   - 分栏尺寸（列表宽度 / 历史高度）走 host 端 /api/desktop-workbench/prefs
+     *     （不能用 localStorage——后端端口每次启动随机变化，web origin 随之
+     *     变化，localStorage 在重启后整体失效）；
+     *   - 仓库选择（工作区）per-session 持久化，走 /api/desktop-workbench/layout
+     *     的 repo 字段（host 端 merge 语义，不覆盖框架自己的布局字段）。
+     */
+    const PREF_URL = "/api/desktop-workbench/prefs";
+    const PREF_LIST_WIDTH = "git.listWidth";
+    const PREF_HISTORY_HEIGHT = "git.historyHeight";
+    const LAYOUT_URL = "/api/desktop-workbench/layout";
+    const ddgitPrefSaveDebounceMs = 400;
+
+    /** 读取全局偏好：失败回退空对象。 */
+    function loadGitPrefs() {
+      return fetch(PREF_URL, {
+        headers: { accept: "application/json" },
+        cache: "no-store",
+      })
+        .then((res) =>
+          res.ok
+            ? res.json()
+            : Promise.reject(new Error("prefs-http-" + res.status)),
+        )
+        .then((body) =>
+          body && typeof body.prefs === "object" && body.prefs !== null
+            ? body.prefs
+            : {},
+        )
+        .catch(() => ({}));
+    }
+
+    /** 写入偏好（白名单字段由 host 端窄化）。 */
+    function saveGitPrefs(patch) {
+      return fetch(PREF_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prefs: patch }),
+      }).catch(() => {});
+    }
+
+    /** 读取当前会话的布局（仓库选择恢复用）。 */
+    function loadGitLayout(sessionId) {
+      return fetch(
+        LAYOUT_URL + "?session=" + encodeURIComponent(sessionId),
+        { headers: { accept: "application/json" }, cache: "no-store" },
+      )
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null);
+    }
+
+    /** 持久化当前会话的仓库选择（merge 语义，只写 repo 字段）。 */
+    function saveGitLayout(sessionId, repo) {
+      return fetch(LAYOUT_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ session: sessionId, layout: { repo } }),
+      }).catch(() => {});
+    }
 
     /** 当前会话 id / cwd（模块级 store，组件拼 URL 用）。 */
     const ddgitStore = {
@@ -107,6 +164,10 @@ window.__ModuleLoader__.load({
       cwd: null,
       listeners: new Set(),
       update(sessionId, cwd) {
+        // 幂等保护：官方 sessions.list 在 AI 对话期间会因投影/任务帧
+        // 频繁通知（快照本身不比较），current/cwd 未变时不得重发——
+        // 否则 GitPanel 会被高频重渲染（对话中面板闪烁）。
+        if (this.sessionId === sessionId && this.cwd === cwd) return;
         this.sessionId = sessionId;
         this.cwd = cwd;
         for (const listener of Array.from(this.listeners)) {
@@ -420,37 +481,55 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = react.useState(false);
       const [hint, setHint] = react.useState(null); // { ok, text }
       const hintTimer = react.useRef(null);
-      // 分栏尺寸：文件列表宽度 / 历史区高度（可拖拽，localStorage 记忆）。
-      const [listWidth, setListWidth] = react.useState(() => {
-        try {
-          const raw = Number(localStorage.getItem(LIST_WIDTH_KEY));
-          return Number.isFinite(raw) && raw >= 140 ? raw : 240;
-        } catch {
-          return 240;
-        }
-      });
-      const [historyHeight, setHistoryHeight] = react.useState(() => {
-        try {
-          const raw = Number(localStorage.getItem(HISTORY_HEIGHT_KEY));
-          return Number.isFinite(raw) && raw >= 64 ? raw : 132;
-        } catch {
-          return 132;
-        }
-      });
+      // 分栏尺寸：文件列表宽度 / 历史区高度（可拖拽，host 端 prefs 持久化；
+      // localStorage 因后端端口每次启动变化而跨重启失效）。
+      const [listWidth, setListWidth] = react.useState(240);
+      const [historyHeight, setHistoryHeight] = react.useState(132);
+      // 挂载时应用已保存偏好（异步：先默认值渲染，到达后收敛）。
       react.useEffect(() => {
-        try {
-          localStorage.setItem(LIST_WIDTH_KEY, String(listWidth));
-        } catch {
-          // localStorage 不可用时仅失去记忆，不影响使用。
+        let current = true;
+        loadGitPrefs().then((prefs) => {
+          if (!current) return;
+          if (typeof prefs[PREF_LIST_WIDTH] === "number" && Number.isFinite(prefs[PREF_LIST_WIDTH])) {
+            setListWidth(
+              Math.min(420, Math.max(140, Math.round(prefs[PREF_LIST_WIDTH]))),
+            );
+          }
+          if (typeof prefs[PREF_HISTORY_HEIGHT] === "number" && Number.isFinite(prefs[PREF_HISTORY_HEIGHT])) {
+            setHistoryHeight(
+              Math.min(320, Math.max(64, Math.round(prefs[PREF_HISTORY_HEIGHT]))),
+            );
+          }
+        });
+        return () => {
+          current = false;
+        };
+      }, []);
+      // 变更 → 防抖写回（初始加载应用旧值不触发，值与 state 相同）。
+      const prefsTimer = react.useRef(null);
+      const schedulePrefSave = (patch) => {
+        if (prefsTimer.current !== null) {
+          clearTimeout(prefsTimer.current);
         }
+        prefsTimer.current = window.setTimeout(
+          () => saveGitPrefs(patch),
+          ddgitPrefSaveDebounceMs,
+        );
+      };
+      react.useEffect(() => {
+        schedulePrefSave({ [PREF_LIST_WIDTH]: listWidth });
       }, [listWidth]);
       react.useEffect(() => {
-        try {
-          localStorage.setItem(HISTORY_HEIGHT_KEY, String(historyHeight));
-        } catch {
-          // localStorage 不可用时仅失去记忆，不影响使用。
-        }
+        schedulePrefSave({ [PREF_HISTORY_HEIGHT]: historyHeight });
       }, [historyHeight]);
+      react.useEffect(
+        () => () => {
+          if (prefsTimer.current !== null) {
+            clearTimeout(prefsTimer.current);
+          }
+        },
+        [],
+      );
 
       // 分栏拖拽：x = 列表宽度，y = 历史区高度（pointer capture 拖动）。
       const resizeRef = react.useRef(null);
@@ -530,26 +609,39 @@ window.__ModuleLoader__.load({
           });
       }, [repo]);
 
-      // 初始加载 + 会话变化：重扫仓库列表、重置选择并刷新（用 ref 调最新
-      // refresh，避免把 refresh 放进依赖导致仓库切换时重复重扫）。
+      // 初始加载 + 会话变化：重扫仓库列表、恢复上次选择的仓库（保存值在
+      // 新 cwd 的仓库列表中才应用，否则回退会话根）、重置选择并刷新。
+      const repoRef = react.useRef(repo);
+      repoRef.current = repo;
       const refreshRef = react.useRef(refresh);
       refreshRef.current = refresh;
       react.useEffect(() => {
         if (sessionSnap.sessionId === null) return;
         let current = true;
-        setRepo("");
         setSelected(null);
         // 立即清空仓库列表与旧列表，避免切换瞬间点到旧会话的仓库/文件。
         setRepos([]);
         setStatus({ loading: true, repo: false, repoPath: "", branch: "", files: [], error: null });
-        fetchGitRepos()
-          .then((list) => {
-            if (current) setRepos(list);
-          })
-          .catch(() => {
-            if (current) setRepos([]);
-          });
-        refreshRef.current();
+        Promise.all([
+          fetchGitRepos().catch(() => []),
+          loadGitLayout(sessionSnap.sessionId),
+        ]).then(([list, layoutBody]) => {
+          if (!current) return;
+          setRepos(list);
+          const savedRepo =
+            layoutBody &&
+            typeof layoutBody.layout?.repo === "string" &&
+            layoutBody.layout.repo !== ""
+              ? layoutBody.layout.repo
+              : "";
+          const next =
+            savedRepo !== "" && list.includes(savedRepo) ? savedRepo : "";
+          if (next !== repoRef.current) {
+            setRepo(next);
+          } else {
+            refreshRef.current();
+          }
+        });
         return () => {
           current = false;
         };
@@ -757,6 +849,10 @@ window.__ModuleLoader__.load({
         // 立即清空旧列表（快照绑定旧 repo，防止切换瞬间误操作）。
         setStatus({ loading: true, repo: false, repoPath: value, branch: "", files: [], error: null });
         setRepo(value);
+        // 持久化当前会话的仓库选择（失败静默，不影响使用）。
+        if (sessionSnap.sessionId !== null) {
+          saveGitLayout(sessionSnap.sessionId, value);
+        }
       };
 
       return jsxs("div", {

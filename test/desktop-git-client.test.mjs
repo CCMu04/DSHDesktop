@@ -113,14 +113,22 @@ const fakeWorkbench = {
   openFile() {},
   activateTab() {},
 }
+// 记录 sessions.list 订阅回调：模拟 AI 对话期间官方高频通知（投影/任务帧）。
+let listSubscriber = null
+let mockCurrent = 's1'
 const sessionsStub = {
   list: {
     getSnapshot: () => ({
-      current: 's1',
+      current: mockCurrent,
       items: [{ id: 's1' }],
       byId: { s1: { cwd: 'C:\\work\\demo' } },
     }),
-    subscribe: () => () => {},
+    subscribe: (fn) => {
+      listSubscriber = fn
+      return () => {
+        listSubscriber = null
+      }
+    },
   },
 }
 const ctx = {
@@ -188,6 +196,18 @@ if (!tab) throw new Error('git tab not registered')
 if (tab.order !== 30) throw new Error(`git tab order wrong: ${tab.order}`)
 if (typeof tab.icon !== 'function') throw new Error('git tab icon missing')
 if (typeof tab.component !== 'function') throw new Error('git tab component missing')
+
+// AI 对话期间官方 sessions.list 因投影/任务帧高频通知（快照本身不比较），
+// current/cwd 未变时 store 必须幂等（不重发、面板不被高频重渲染——闪烁
+// 根因回归保护）。
+if (typeof listSubscriber !== 'function') throw new Error('sessions subscriber not registered')
+for (let i = 0; i < 20; i += 1) listSubscriber()
+
+// 会话真正切换时订阅仍正常处理（current 变化 → 不抛错）。
+mockCurrent = 's2'
+listSubscriber()
+mockCurrent = 's1'
+listSubscriber()
 
 // 禁用态收敛：不注册任何 tab。
 servedConfig = { enabled: false }

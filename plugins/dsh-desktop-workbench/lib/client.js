@@ -1,30 +1,35 @@
 /**
  * dsh-desktop-workbench — browser half.
  *
- * 工作台框架：作为官方 AppFrame 布局的「右侧分栏」（grid 第四列）存在，
- * 不是浮层抽屉——sidebar | 对话 | details | workbench 四列并排，随窗口
- * 一起伸缩，样式对齐官方右侧列（DetailsPanel 同款 token 与结构）。
+ * 工作台框架：作为「对话页内部右侧分栏」存在——聊天界面对话视图（chat）的
+ * 右边、官方「对话 / 轨迹」页签栏下方；只有对话页签激活时显示，切换到轨迹
+ * 页签时自动隐藏（ChatView 卸载即消失）。
  *
  * 职责边界（框架不承载任何功能）：
- *   - 在 AppFrame 的 grid-template-columns 上追加第 4 条轨道（工作台列），
- *     自身作为 grid item（grid-column: 4 / grid-row: 1）挂载；官方三列
- *     （sidebar / 对话 / details）原样保留；
- *   - 列顶横向页签栏 + 内容区；收起后轨道归 0，右侧边缘出现细条按钮；
+ *   - 在官方 ChatView 根（[data-chat-flow] 的祖先容器）上做两列 grid 分栏：
+ *     左列 = 官方消息流，右列 = 工作台；工作台列高度钉在滚动视口
+ *     （[data-conversation-scroll] 的 clientHeight）内，消息流滚动时工作台
+ *     保持可见；
+ *   - 打开方式：官方 Header 页签行右端（conversation.session.header.utilities
+ *     槽位）注册 [|] 图标按钮（官方 IconPanelLeftOutline16），点击切换开合；
+ *   - 无独立标题行：不显示「工作台」字样，页签栏（文件 / Git …）紧凑排在
+ *     列顶，不与官方页签行对齐；
  *   - 提供服务 ctx.provide('desktop.workbench')：
  *       registerTab / registerViewer / activateTab / updateTab /
- *       openFile / closeFile / getSnapshot / subscribe / onAction；
- *   - 自身注册「示例」Tab 与「示例预览」viewer，验证 注册 → 服务分发 → 渲染 链路；
+ *       openFile / closeFile / collapse / getSnapshot / subscribe / onAction；
  *   - 在「功能增强」聚合卡片注册框架总开关（order 5）。
  *
- * 功能插件（文件 / 终端 / Git / 浏览器 / 后台任务）通过
- * inject: ['desktop.workbench'] 拿到服务，注册自己的 Tab 与文件预览器。
- * 会话级布局（打开状态 / 宽度 / 激活 tab / 打开的文件）经 host 端
- * /api/desktop-workbench/layout 持久化。
+ * 功能插件（文件 / Git 等）通过 inject: ['desktop.workbench'] 拿到服务，
+ * 注册自己的 Tab 与文件预览器。会话级布局（打开状态 / 宽度 / 激活 tab /
+ * 打开的文件）经 host 端 /api/desktop-workbench/layout 持久化。
  *
- * 关于 grid 注入的稳健性：
- *   - AppFrame 每次重渲染都会重写 frame 的内联 gridTemplateColumns，
- *     用 MutationObserver 跟随重写，始终把第 4 条轨道钳在末尾；
- *   - React 收敛子节点时可能摘掉我们追加的列，用 childList 观察器自愈重挂。
+ * 关于注入的稳健性：
+ *   - ChatView 只在对话页签激活时挂载（conversation.view 槽位按激活视图
+ *     渲染），视图切换时整棵子树卸载；用 MutationObserver 跟随
+ *     [data-chat-flow] 的出现/消失，重新挂载列并恢复布局状态；
+ *   - React 收敛子节点时可能摘掉我们追加的列，childList 观察器自愈重挂；
+ *   - 滚动视口高度变化（窗口 resize / 官方 details 开合）由 ResizeObserver
+ *     跟随，工作台列高度实时同步。
  */
 window.__ModuleLoader__.load({
   id: "dsh-desktop-workbench",
@@ -35,12 +40,10 @@ window.__ModuleLoader__.load({
     let react_jsx_runtime = require("react/jsx-runtime");
     let react = require("react");
     let react_dom_client = require("react-dom/client");
-    let react_dom = require("react-dom");
     let _deepseek_ai_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
     const { jsx, jsxs } = react_jsx_runtime;
     const { createElement } = react;
-    const { IconChevronLeftOutline14, IconChevronRightOutline14 } =
-      _deepseek_ai_dsh_client_ui_primitives;
+    const { IconPanelLeftOutline16 } = _deepseek_ai_dsh_client_ui_primitives;
 
     //#region 常量与工具
     const NS = "desktop-workbench";
@@ -56,8 +59,8 @@ window.__ModuleLoader__.load({
     const ddwbLayoutSaveDebounceMs = 400;
     /** 拖拽到该宽度以下时自动收起面板（小于最小可见宽度 240）。 */
     const ddwbCollapseWidth = 200;
-    /** AppFrame 容器特征：唯一带内联 grid-template-columns 的元素。 */
-    const ddwbFrameSelector = '[style*="grid-template-columns"]';
+    /** ChatView 根的特征：消息流容器（对话视图独有，轨迹视图不渲染）。 */
+    const ddwbChatFlowSelector = '[data-chat-flow]';
 
     /**
      * 功能页签横向滚动：滚动条已隐藏，把鼠标滚轮的垂直滚动转成横向位移
@@ -115,61 +118,41 @@ window.__ModuleLoader__.load({
     }
     //#endregion
 
-    //#region 样式（复刻官方 ConversationRoot 的 header/tab 视觉）
-    // 结构对齐：官方 header 是「titleRow（min-height 32px）+ tabs
-    // （margin-top 4px / padding-left 8px / gap 36px）」两行结构；工作台
-    // 列完全照搬——第一行用隐形文字占位（.ddwb_ghost，撑出与官方相同的
-    // 行高），第二行 tabs 用官方一模一样的选择器值，因此 tab 顶自动落在
-    // 与官方「对话 / 轨迹」页签完全相同的 48px 处，无需猜高度。
-    // 列从 y=0 开始（grid item 全高）：顶部 38px 与窗口按钮区重叠，
-    // 但该区域只有隐形占位行，被按钮盖住无影响；tab 行在 48px 起，
-    // 完全位于按钮区下方。
-    // 收起入口：官方 DragHandle 同款 hover-reveal 左边缘把手——平时
-    // 透明（opacity 0），鼠标移入列或把手时淡入小圆钮，点击收起；
-    // 不占头部空间，也不与 tabs 行争位置。
+    //#region 样式（紧凑页签栏 + 内容区；无标题行；对话页内分栏）
+    // 工作台列顶：单行页签栏（文件 / Git …），不显示「工作台」标题字样，
+    // 不与官方页签行对齐；列高度由 JS 钉在滚动视口内，内容区自行滚动。
+    // 打开/关闭由官方 Header 页签行右端的 [|] 按钮控制，无右侧细条按钮。
     const css =
-      ".ddwb_col{border-left:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);flex-direction:column;min-width:0;height:100%;display:flex;position:relative}" +
-      // 左 padding 取官方值 20px：标题行与页签行都落在与官方主列内容
-      // 相同的左边缘（20px）；右侧收窄到 8px（本列无 breadcrumb/utilities，
-      // 右端只有关闭按钮，无需官方 28px）。
-      // （tab 顶 48px 与官方页签对齐由垂直结构保证，不受水平 padding 影响）
-      ".ddwb_header{border-bottom:1px solid #0000;flex:none;position:relative;padding:12px 8px 0 20px;-webkit-app-region:drag}" +
-      ".ddwb_header:after{content:\"\";z-index:0;background:var(--dsw-alias-border-l2);pointer-events:none;height:1px;position:absolute;bottom:1px;left:0;right:0}" +
-      // 第一行标题：官方 crumb 同款节奏（14px/500），撑出行高的同时
-      // 让 0–32px 区域有内容；左 padding 继承 header 的 20px，
-      // 与下方第一个 tab 及官方主列左边缘对齐。
-      ".ddwb_titleRow{min-height:32px;align-items:center;gap:10px;display:flex}" +
-      ".ddwb_title{white-space:nowrap;font-size:14px;font-weight:500;line-height:20px;color:var(--dsw-alias-label-secondary)}" +
-      ".ddwb_tabsRow{flex:1;min-width:0;z-index:1;position:relative;margin-top:4px;display:flex;align-items:flex-end;gap:6px}" +
-      ".ddwb_tabs{flex:1;min-width:0;display:flex;align-items:flex-end;gap:16px;overflow-x:auto;scrollbar-width:none}" +
+      // 注意：宿主 div 与 WorkbenchColumn 根 div 都是 .ddwb_col（宿主是
+      // grid item，内部渲染的列是其 flex 子项）——flex:1 让内层列撑满
+      // 宿主高度（否则内容区只有内容高度，工作台看起来没撑满）。
+      ".ddwb_col{border-left:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);flex:1;flex-direction:column;min-width:0;min-height:0;display:flex;position:relative;overflow:hidden}" +
+      // 拖拽调宽期间禁用对话页根的布局过渡（不跟手根因：官方 root 可能有
+      // grid-template-columns transition，每帧改宽度被动画拖着走）。
+      "[data-phase][data-ddwb-dragging]{transition:none!important}" +
+      ".ddwb_header{border-bottom:1px solid var(--dsw-alias-border-l2);flex:none;position:relative;padding:4px 6px 0 10px}" +
+      ".ddwb_tabsRow{flex:1;min-width:0;z-index:1;position:relative;display:flex;align-items:flex-end;gap:6px}" +
+      ".ddwb_tabs{flex:1;min-width:0;display:flex;align-items:flex-end;gap:14px;overflow-x:auto;scrollbar-width:none}" +
       ".ddwb_tabs::-webkit-scrollbar{display:none}" +
-      // 右侧工具按钮（关闭工作台）：22px 高 + margin-bottom 8px 使图标
-      // 中心与 tab 文字中心对齐；位于 tab 栏右侧空白区，不占 tab 宽度。
-      ".ddwb_toolBtn{appearance:none;flex:none;width:22px;height:22px;margin-bottom:8px;border:0;border-radius:6px;background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;-webkit-app-region:no-drag}" +
-      ".ddwb_toolBtn:hover:not(:disabled),.ddwb_toolBtn:focus-visible{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}" +
-      ".ddwb_tab{color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;padding:0 0 11px;font-size:13px;font-weight:500;line-height:16px;white-space:nowrap;position:relative;display:inline-flex;align-items:center;gap:6px;-webkit-app-region:no-drag}" +
+      ".ddwb_tab{color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;padding:0 0 7px;font-size:13px;font-weight:500;line-height:16px;white-space:nowrap;position:relative;display:inline-flex;align-items:center;gap:6px}" +
+      ".ddwb_tabBadge{min-width:16px;background:var(--dsw-alias-brand-primary);color:var(--dsw-alias-bg-layer-1);border-radius:999px;padding:0 5px;font-size:10px;line-height:16px;text-align:center}" +
       ".ddwb_tabIcon{display:inline-flex;color:var(--dsw-alias-label-tertiary)}" +
       ".ddwb_tab:hover:not(:disabled),.ddwb_tab:focus-visible{color:var(--dsw-alias-label-primary)}" +
       ".ddwb_tab:after{content:\"\";background:0 0;border-radius:2px;height:2px;position:absolute;bottom:1px;left:0;right:0}" +
       ".ddwb_tabActive{color:var(--dsw-alias-label-primary)}" +
       ".ddwb_tabActive:after{background:var(--dsw-alias-brand-primary)}" +
-      ".ddwb_tabBadge{min-width:16px;background:var(--dsw-alias-brand-primary);color:var(--dsw-alias-bg-layer-1);border-radius:999px;padding:0 5px;font-size:10px;line-height:16px;text-align:center}" +
-      ".ddwb_handle{cursor:col-resize;z-index:3;touch-action:none;width:8px;margin-left:-4px;position:absolute;top:0;bottom:0;left:0;background:0 0;border:none;padding:0;-webkit-app-region:no-drag;display:grid;place-items:center;transition:background var(--ds-transition-duration-slow) var(--ds-ease-in-out)}" +
-      // 高亮与 tab 激活下划线同色（--dsw-alias-brand-primary），
-      // hover/拖拽背景用常规交互 hover 色。
-      ".ddwb_handle:hover,.ddwb_handle:active,.ddwb_handle:focus-visible{background:var(--dsw-alias-interactive-bg-hover)}" +
-      ".ddwb_handle:after{content:\"\";box-sizing:border-box;width:2px;height:100%;border-radius:2px;background:var(--dsw-alias-border-l2);transition:background var(--ds-transition-duration-slow) var(--ds-ease-in-out)}" +
-      ".ddwb_handle:hover:after,.ddwb_handle:active:after,.ddwb_handle:focus-visible:after{background:var(--dsw-alias-brand-primary)}" +
+      // 拖拽热区：完全透明（视觉上就是列左缘那条分割线本身），仅保留
+      // col-resize 光标与 8px 命中宽度；无 hover 高亮、无竖线装饰。
+      ".ddwb_handle{cursor:col-resize;z-index:3;touch-action:none;width:8px;margin-left:-4px;position:absolute;top:0;bottom:0;left:0;background:0 0;border:none;padding:0}" +
       ".ddwb_body{flex:1;min-height:0;overflow:auto}" +
       ".ddwb_placeholder{padding:24px 16px;text-align:center;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.6}" +
       ".ddwb_placeholderTitle{display:block;color:var(--dsw-alias-label-secondary);font-size:14px;font-weight:600;margin-bottom:4px}" +
-      ".ddwb_rail{position:fixed;top:50%;right:0;transform:translateY(-50%);width:28px;height:64px;border:1px solid var(--dsw-alias-border-l2);border-right:0;border-radius:10px 0 0 10px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);cursor:pointer;box-shadow:-4px 0 12px rgba(0,0,0,.06);z-index:60;display:inline-flex;align-items:center;justify-content:center}" +
-      ".ddwb_rail:hover:not(:disabled),.ddwb_rail:focus-visible{color:var(--dsw-alias-label-primary)}" +
-      // 实际模板由 CSS 变量接管（!important 覆盖 React 的 inline 三列，
-      // 避免与 React 争夺样式导致的列闪烁/自动关闭）；默认回退官方三列。
-      "div[style*=\"grid-template-columns\"]{grid-template-columns:var(--ddwb-grid-template, 280px minmax(0, 1fr) 0px) !important}" +
-      // 拖拽中关掉官方 frame 的 grid-template-columns transition（不跟手根因）。
-      "div[style*=\"grid-template-columns\"][data-dragging]{transition:none}" +
+      // Header 页签行右端的 [|] 开合按钮：与打开工作区/导出会话同排。
+      // Header 页签行右端的 [|] 开合按钮：与打开工作区 / 导出会话同排同风格
+      // （dshDesktopUi_trigger 同款：28px 高、12px 字、图标 12 + 文字）。
+      ".ddwb_toggleBtn{box-sizing:border-box;min-height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:0;border-radius:6px;align-items:center;gap:4px;padding:0 8px;font-size:12px;line-height:20px;white-space:nowrap;display:inline-flex}.ddwb_toggleBtn:hover:not(:disabled),.ddwb_toggleBtn:focus-visible{color:var(--dsw-alias-label-secondary)}.ddwb_toggleBtn:disabled{opacity:.45;cursor:default}.ddwb_toggleBtnActive{color:var(--dsw-alias-brand-primary)}.ddwb_toggleBtnActive:hover:not(:disabled),.ddwb_toggleBtnActive:focus-visible{color:var(--dsw-alias-brand-primary)}.ddwb_toggleBtn svg,.ddwb_toggleBtn span{flex:none}" +
+      // 官方左面板图标水平翻转 → 「右侧面板」（工作台在对话页右侧）。
+      ".ddwb_panelRight{transform:scaleX(-1)}" +
       ".ddwb_card{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;padding:14px 16px;margin:12px}" +
       ".ddwb_cardTitle{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:600;line-height:1.4;margin-bottom:6px}" +
       ".ddwb_cardText{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.6;margin-bottom:10px}" +
@@ -192,16 +175,22 @@ window.__ModuleLoader__.load({
 
     //#region 服务：desktop.workbench
     /**
-     * Tab / viewer 注册表 + 动作通道。
+     * Tab / viewer 注册表 + 动作通道 + 开合状态。
      *   - 注册表（tabs / viewers）经 getSnapshot / subscribe 暴露；
      *   - UI 状态（激活 tab / 打开的文件）属于列组件，动作经 onAction 分发，
-     *     列未挂载时动作安全丢弃。
+     *     列未挂载时动作安全丢弃；开合状态（open）由服务持有，Header 按钮
+     *     与列组件共享，视图切换（对话 ↔ 轨迹）后重新挂载时恢复。
      */
     function createWorkbenchService() {
       const tabs = new Map();
       const viewers = new Map();
       const listeners = new Set();
       const actionHandlers = new Set();
+      const stateListeners = new Set();
+      /** 历史消息加载中：官方 ChatView 显示「载入历史…」期间禁止打开面板。 */
+      const historyLoadingListeners = new Set();
+      let open = false;
+      let historyLoading = false;
       const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0);
       const snapshot = () => ({
         tabs: Array.from(tabs.values()).sort(byOrder),
@@ -214,6 +203,15 @@ window.__ModuleLoader__.load({
             listener(snap);
           } catch {
             // A failing subscriber must not break the registry.
+          }
+        }
+      };
+      const emitState = () => {
+        for (const listener of Array.from(stateListeners)) {
+          try {
+            listener(open);
+          } catch {
+            // A failing subscriber must not break the toggle.
           }
         }
       };
@@ -267,9 +265,10 @@ window.__ModuleLoader__.load({
             if (viewers.delete(descriptor.id)) emit();
           };
         },
-        /** 激活一个 Tab（切换内容区，关闭已打开的文件）。 */
+        /** 激活一个 Tab（切换内容区，关闭已打开的文件，同时打开面板）。 */
         activateTab(id) {
           if (!tabs.has(id)) return;
+          this.setOpen(true);
           dispatchAction({ type: "activateTab", id });
         },
         /** 原位更新 Tab 描述（如角标）。 */
@@ -303,7 +302,50 @@ window.__ModuleLoader__.load({
         },
         /** 折叠面板（外部触发，如最后一个文件页签关闭时）。 */
         collapse() {
+          this.setOpen(false);
           dispatchAction({ type: "collapsePanel" });
+        },
+        /** 切换面板开合（Header [|] 按钮；历史消息加载中禁止打开）。 */
+        toggle() {
+          if (historyLoading) return;
+          this.setOpen(!open);
+        },
+        /** 打开/收起面板（外部触发，如点击会话里的文件链接）。 */
+        setOpen(value) {
+          // 历史消息加载中拒绝打开（关闭不受限）：加载期间打开会让
+          // 网格重排与官方滚动位置/高度调整互相干扰。
+          if (value === true && historyLoading) return;
+          open = value === true;
+          emitState();
+        },
+        /** 当前开合状态（Header 按钮高亮用）。 */
+        isOpen() {
+          return open;
+        },
+        /** 订阅开合状态；返回 disposer。 */
+        onOpenChange(listener) {
+          stateListeners.add(listener);
+          return () => stateListeners.delete(listener);
+        },
+        /** 历史消息加载状态（installDock 的 DOM 观察器写入）。 */
+        setHistoryLoading(value) {
+          historyLoading = value === true;
+          for (const listener of Array.from(historyLoadingListeners)) {
+            try {
+              listener(historyLoading);
+            } catch {
+              // A failing subscriber must not break the loading gate.
+            }
+          }
+        },
+        /** 当前历史消息加载状态。 */
+        isHistoryLoading() {
+          return historyLoading;
+        },
+        /** 订阅历史消息加载状态；返回 disposer。 */
+        onHistoryLoadingChange(listener) {
+          historyLoadingListeners.add(listener);
+          return () => historyLoadingListeners.delete(listener);
         },
         getSnapshot: snapshot,
         subscribe(listener) {
@@ -319,105 +361,134 @@ window.__ModuleLoader__.load({
     }
     //#endregion
 
-    //#region AppFrame grid 集成
+    //#region 对话区 grid 集成
     /**
-     * 找到官方三栏 frame（唯一带内联 grid-template-columns 的元素）。
-     * 页面核心 bundle 可能晚于插件加载，调用方负责重试。
+     * 找到对话页根容器（[data-phase]，ConversationRoot 根）：对话页最外层
+     * 容器，flex column（header + scrollBody）。页面核心 bundle 可能晚于
+     * 插件加载，调用方负责重试。
      */
-    function findAppFrame() {
+    function findRoot() {
       try {
-        return document.querySelector(ddwbFrameSelector);
+        const scrollBody = document.querySelector('[data-conversation-scroll]');
+        return scrollBody?.parentElement ?? null;
       } catch {
         return null;
       }
     }
 
     /**
-     * 解析 grid-template-columns 轨道列表。
-     * 不能用简单的空白 split：minmax(0, 1fr) 内部有空格，
-     * 必须感知括号层级再切分。
+     * 找到对话视图消息流容器（[data-chat-flow]，ChatView 独有，轨迹视图不渲染）。
      */
-    function parseGridTracks(template) {
-      const tracks = [];
-      let depth = 0;
-      let current = "";
-      for (const ch of String(template)) {
-        if (ch === "(") depth += 1;
-        else if (ch === ")") depth -= 1;
-        if ((ch === " " || ch === "\t") && depth === 0) {
-          if (current.length > 0) {
-            tracks.push(current);
-            current = "";
-          }
-        } else {
-          current += ch;
-        }
+    function findChatFlow() {
+      try {
+        return document.querySelector(ddwbChatFlowSelector);
+      } catch {
+        return null;
       }
-      if (current.length > 0) tracks.push(current);
-      return tracks;
     }
 
     /**
-     * 把工作台列接进 frame —— 用 CSS 变量接管渲染值，不与 React 争夺
-     * inline style：
-     *   - 注入规则 `div[style*="grid-template-columns"]{grid-template-columns:
-     *     var(--ddwb-grid-template, <官方默认>) !important}`，实际模板由
-     *     变量决定；React 重写 inline 模板（3 轨）不影响渲染，列永不闪没；
-     *   - 变量同步：读 React 写下的 inline 三列 → 拼上工作台轨道（含
-     *     details 协调）→ 写入变量；lastSynced 短路避免自身写入触发循环；
-     *   - 拖拽：setDragging(true/false) 切换官方 `data-dragging` 属性，
-     *     关掉官方 frame 的 grid-template-columns transition（不跟手的
-     *     根因就是它：我们每帧改模板，动画把列宽拖着走）。
-     * 返回 { setTrack(width), setDragging(on), dispose }。
+     * 检测「历史消息加载中」：官方 ChatView 在 openState === "loading" 时于
+     * [data-chat-flow] 内渲染一个纯文本提示 div（内容为「载入历史…」/
+     * "Loading history…"）。hint 是消息流容器里唯一无子元素的叶子 div，
+     * 与消息节点（有子结构）区分；加载失败（openError）与分页按钮
+     * （older）不会误判——前者文本不匹配，后者带子 button。
      */
-    function attachToFrame(frame, column) {
+    function findHistoryLoading() {
+      try {
+        const flow = document.querySelector(ddwbChatFlowSelector);
+        if (flow === null || typeof flow.children === "undefined") return false;
+        for (const child of flow.children) {
+          if (typeof child.children !== "undefined" && child.children.length > 0) {
+            continue;
+          }
+          const text = (child.textContent ?? "").trim();
+          if (text === "载入历史…" || text === "Loading history…") return true;
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    }
+
+    /**
+     * 把工作台列接进对话区 scrollBody：
+     *   - scrollBody 变两列 grid：左列 = 官方内容（消息流槽 + composerSeat，
+     *     均自动落在第一列），右列 = 工作台（grid-column 2 / grid-row 1 / -1，
+     *     跨消息流与输入框两行——输入框不会顶起工作台）；
+     *   - 列高钉在 scrollBody 视口高度（clientHeight），ResizeObserver 跟随
+     *     窗口/布局变化；sticky top 0 让消息流滚动时工作台保持可见；
+     *   - 轨道宽度由 --ddwb-chat-track 变量控制（0 = 收起）；
+     *   - 列挂在外层容器而非 ChatView 根内：会话切换 / 视图切换只改变
+     *     scrollBody 内部内容（ChatView 卸载重挂），列本体不销毁——
+     *     [data-chat-flow] 消失时把轨道钳 0（隐藏），重新出现时恢复。
+     * 返回 { setTrack(width), dispose }。
+     */
+    function attachToRoot(root, column) {
+      const WIDTH_VAR = "--ddwb-chat-track";
       const observers = [];
-      const WIDTH_VAR = "--ddwb-grid-template";
-      let lastSynced = null;
-      /** 由 React 的 inline 三列模板 + 工作台宽度，拼出实际模板字符串。 */
-      const targetTemplate = (inlineTemplate, width) => {
-        const tracks = parseGridTracks(inlineTemplate);
-        if (tracks.length < 3) return null; // 官方三列尚未就绪
-        // 与官方 details 列协调：details 打开时把工作台轨道钳 0。
-        const detailsOpen = tracks[2] !== "0px" && tracks[2] !== "0";
-        return (
-          tracks.slice(0, 3).join(" ") + " " + (detailsOpen ? 0 : width) + "px"
-        );
+      let lastWidth = 0;
+      const headerSlot = root.querySelector(
+        '[data-slot="conversation.session.header"]',
+      );
+      const header = headerSlot?.querySelector('header') ?? null;
+      const scrollBody = root.querySelector('[data-conversation-scroll]');
+      const applyTrack = () => {
+        root.style.setProperty(WIDTH_VAR, String(lastWidth) + "px");
+        // 根 grid 化：两行（header / 内容区），内容区两列（聊天 / 工作台）。
+        root.style.display = "grid";
+        root.style.gridTemplateRows = "auto minmax(0, 1fr)";
+        root.style.gridTemplateColumns =
+          "minmax(0, 1fr) var(--ddwb-chat-track, 0px)";
+        if (header !== null) {
+          header.style.gridColumn = "1 / -1";
+          header.style.gridRow = "1";
+          header.style.minWidth = "0";
+        }
+        if (scrollBody !== null) {
+          scrollBody.style.gridColumn = "1";
+          scrollBody.style.gridRow = "2";
+          scrollBody.style.minWidth = "0";
+        }
+        column.style.gridColumn = "2";
+        column.style.gridRow = "2";
+        column.style.minWidth = "0";
+        // 列高 = 内容行高 = scrollBody 视口高度（grid stretch，无需显式 height）。
+        column.style.alignSelf = "stretch";
       };
-      /** 读 React inline 模板 → 同步变量（lastSynced 短路防循环）。 */
-      const sync = (width) => {
-        const target = targetTemplate(frame.style?.gridTemplateColumns ?? "", width);
-        if (target === null || target === lastSynced) return;
-        lastSynced = target;
-        frame.style.setProperty(WIDTH_VAR, target);
-      };
-      const ensureColumn = () => {
-        if (!frame.contains(column)) frame.appendChild(column);
-      };
-      ensureColumn();
-      // style 观察器：React 重写 inline 模板时（或我们 setProperty 变量时，
-      // 被 lastSynced 短路）重新同步变量。
-      const styleObserver = new MutationObserver(() => {
-        const raw = Number(column.dataset.ddwbTrack);
-        sync(Number.isFinite(raw) ? raw : ddwbLayoutWidthDefault);
+      applyTrack();
+      // React 重渲染可能摘掉列，childList 观察器自愈重挂。
+      const childObserver = new MutationObserver(() => {
+        if (!root.contains(column)) root.appendChild(column);
       });
-      styleObserver.observe(frame, { attributes: true, attributeFilter: ["style"] });
-      observers.push(styleObserver);
-      const childObserver = new MutationObserver(ensureColumn);
-      childObserver.observe(frame, { childList: true });
+      childObserver.observe(root, { childList: true });
       observers.push(childObserver);
       return {
+        host: root,
         setTrack(width) {
-          column.dataset.ddwbTrack = String(width);
-          sync(width);
+          lastWidth = Math.max(0, Math.round(width));
+          applyTrack();
         },
         setDragging(on) {
-          if (on) frame.setAttribute("data-dragging", "");
-          else frame.removeAttribute("data-dragging");
+          if (on) root.setAttribute("data-ddwb-dragging", "");
+          else root.removeAttribute("data-ddwb-dragging");
         },
         dispose() {
           for (const observer of observers) observer.disconnect();
-          frame.style.removeProperty(WIDTH_VAR);
+          root.style.removeProperty(WIDTH_VAR);
+          root.style.removeProperty("display");
+          root.style.removeProperty("grid-template-rows");
+          root.style.removeProperty("grid-template-columns");
+          if (header !== null) {
+            header.style.removeProperty("grid-column");
+            header.style.removeProperty("grid-row");
+            header.style.removeProperty("min-width");
+          }
+          if (scrollBody !== null) {
+            scrollBody.style.removeProperty("grid-column");
+            scrollBody.style.removeProperty("grid-row");
+            scrollBody.style.removeProperty("min-width");
+          }
           column.remove();
         },
       };
@@ -426,8 +497,9 @@ window.__ModuleLoader__.load({
 
     //#region 工作台列
     /**
-     * 右侧分栏：列顶页签栏 + 内容区 + 收起/展开 + 按会话持久化布局。
+     * 对话页右侧分栏：列顶页签栏 + 内容区 + 拖拽调宽 + 按会话持久化布局。
      * 内容区优先级：打开的文件（viewer）> 激活的 Tab > 空态提示。
+     * 开合状态由服务持有（Header [|] 按钮切换），列渲染与否由宽度决定。
      */
     /** installDock 与列组件之间的桥：列节点、轨道 setter、当前轨道宽度。 */
     const ddwbBridge = { node: null, setTrack: null, setDragging: null, trackWidth: 0 };
@@ -457,11 +529,8 @@ window.__ModuleLoader__.load({
 
     function WorkbenchColumn({ ctx, service, t }) {
       const [snap, setSnap] = react.useState(() => service.getSnapshot());
-      // 默认关闭：新会话加载时工作台保持收起（不恢复上次的开合状态——
-      // 会话加载时面板组件不挂载，避免各功能插件初始化竞态；用户在当前
-      // 会话内的开合/宽度选择仍实时持久化）。
+      const [open, setOpenState] = react.useState(() => service.isOpen());
       const [layout, setLayout] = react.useState({
-        open: false,
         width: ddwbLayoutWidthDefault,
         activeTabId: null,
         file: null,
@@ -487,18 +556,19 @@ window.__ModuleLoader__.load({
 
       // 注册表快照订阅。
       react.useEffect(() => service.subscribe(setSnap), [service]);
+      // 开合状态订阅（Header 按钮切换）。
+      react.useEffect(
+        () => service.onOpenChange(setOpenState),
+        [service],
+      );
 
       // 动作通道订阅：激活 tab / 打开文件 / 关闭文件。
       react.useEffect(
         () =>
           service.onAction((action) => {
             if (action.type === "activateTab") {
-              // 激活页签的同时打开面板：外部触发（如点击对话里的文件
-              // 链接 → openPath 拦截）时工作台可能处于关闭状态，
-              // 需要自动弹出让预览可见。
               setLayout((prev) => ({
                 ...prev,
-                open: true,
                 activeTabId: action.id,
                 file: null,
               }));
@@ -510,10 +580,6 @@ window.__ModuleLoader__.load({
               }));
             } else if (action.type === "closeFile") {
               setLayout((prev) => ({ ...prev, file: null }));
-            } else if (action.type === "collapsePanel") {
-              // 外部请求折叠（如最后一个文件页签关闭）：收起面板，
-              // 轨道归 0 由 layout 同步 effect 处理。
-              setLayout((prev) => ({ ...prev, open: false }));
             }
           }),
         [service],
@@ -540,14 +606,10 @@ window.__ModuleLoader__.load({
                   ? body.layout
                   : null;
               setLayout((prev) => ({
-                // 会话加载一律默认收起（避免面板组件在会话/服务未就绪时
-                // 挂载导致插件初始化问题）；宽度与活动页签仍按上次记忆。
-                open: false,
+                // 会话加载一律默认收起；宽度按上次记忆，活动页签与打开文件
+                // 一律重置（避免不同会话/项目之间内容串扰）。
                 width: ddwbClampWidth(saved?.width ?? prev.width),
-                activeTabId:
-                  saved && typeof saved.activeTabId === "string"
-                    ? saved.activeTabId
-                    : prev.activeTabId,
+                activeTabId: null,
                 file: null,
               }));
               setReady(true);
@@ -589,6 +651,14 @@ window.__ModuleLoader__.load({
               setReady(true);
               return;
             }
+            // 切换会话：关闭工作台并重置内容状态，避免展示上一个会话
+            // （不同项目）的文件/页签内容。
+            service.setOpen(false);
+            setLayout((prev) => ({
+              ...prev,
+              activeTabId: null,
+              file: null,
+            }));
             applyLayout(id);
           };
           try {
@@ -616,7 +686,7 @@ window.__ModuleLoader__.load({
             body: JSON.stringify({
               session: currentIdRef.current,
               layout: {
-                open: layoutRef.current.open,
+                open: service.isOpen(),
                 width: layoutRef.current.width,
                 activeTabId: layoutRef.current.activeTabId,
                 file: layoutRef.current.file
@@ -627,20 +697,16 @@ window.__ModuleLoader__.load({
           }).catch(() => {});
         }, ddwbLayoutSaveDebounceMs);
         return () => clearTimeout(timer);
-      }, [layout, ready]);
+      }, [layout, open, ready, service]);
 
-      // 打开状态 / 宽度 → 同步 grid 轨道（写 dataset 供 attachToFrame 的
-      // style 观察器兜底，已挂载时直接走 setTrack）。
+      // 打开状态 / 宽度 → 同步 grid 轨道（写 bridge 由 attach 的 setTrack 消费）。
       react.useEffect(() => {
-        const width = layout.open ? layout.width : 0;
+        const width = open ? layout.width : 0;
         ddwbBridge.trackWidth = width;
-        if (ddwbBridge.node !== null) {
-          ddwbBridge.node.dataset.ddwbTrack = String(width);
-        }
         if (typeof ddwbBridge.setTrack === "function") {
           ddwbBridge.setTrack(width);
         }
-      }, [layout.open, layout.width]);
+      }, [open, layout.width]);
 
       if (!ready) return null;
 
@@ -671,6 +737,18 @@ window.__ModuleLoader__.load({
               });
       } else if (activeTab && typeof activeTab.component === "function") {
         view = createElement(activeTab.component, { ctx, service, t });
+      } else if (snap.tabs.length > 0) {
+        // 有功能插件但尚未选中标签（如切换会话后重置）：引导选择。
+        view = jsxs("div", {
+          className: "ddwb_placeholder",
+          children: [
+            jsx("span", {
+              className: "ddwb_placeholderTitle",
+              children: t("pickTitle"),
+            }),
+            t("pickHint"),
+          ],
+        });
       } else {
         view = jsxs("div", {
           className: "ddwb_placeholder",
@@ -684,30 +762,11 @@ window.__ModuleLoader__.load({
         });
       }
 
-      // 收起态：轨道归 0，列内容不渲染，改用 body 级细条按钮（portal）。
-      if (!layout.open) {
-        return react_dom.createPortal(
-          jsx("button", {
-            type: "button",
-            className: "ddwb_rail",
-            title: t("openPanel"),
-            onClick: () => setLayout((prev) => ({ ...prev, open: true })),
-            children: jsx(IconChevronLeftOutline14, {
-              size: 14,
-              "aria-hidden": true,
-            }),
-          }),
-          document.body,
-        );
-      }
-
       return jsxs("div", {
         className: "ddwb_col",
         children: [
-          // 左边缘拖拽条：常驻长条（无图标），拖拽调宽——按下时缓存官方
-          // 三列基准模板，拖拽中 rAF 节流后直接拼接模板字符串写轨道
-          // （零解析开销、不经过 React state），松手收敛一次状态触发持久化；
-          // 无位移的按下释放 = 点击 → 收起面板。
+          // 左边缘拖拽条：完全透明热区（8px 宽），视觉上就是中间那条
+          // 分割线本身——拖拽调宽；不做点击收起（收起统一走 Header [|] 按钮）。
           jsx("button", {
             type: "button",
             className: "ddwb_handle",
@@ -715,9 +774,7 @@ window.__ModuleLoader__.load({
             "aria-label": t("resizePanel"),
             onPointerDown: (event) => {
               event.preventDefault();
-              event.currentTarget.setPointerCapture(event.pointerId);
-              // 拖拽期间用官方 data-dragging 机制关掉 frame 的
-              // grid-template-columns transition，列宽才跟手。
+              // 拖拽期间禁用对话页根的 grid 过渡，列宽才跟手。
               if (typeof ddwbBridge.setDragging === "function") {
                 ddwbBridge.setDragging(true);
               }
@@ -727,86 +784,67 @@ window.__ModuleLoader__.load({
                 moved: false,
                 rawWidth: layoutRef.current.width,
                 lastWidth: layoutRef.current.width,
-                raf: null,
               };
-            },
-            onPointerMove: (event) => {
-              const drag = dragRef.current;
-              if (drag === null) return;
-              const dx = event.clientX - drag.startX;
-              if (Math.abs(dx) > 3) drag.moved = true;
-              if (!drag.moved) return;
-              // rawWidth 不钳制：用于「拖到很窄自动收起」判断。
-              drag.rawWidth = drag.startWidth - dx;
-              drag.lastWidth = ddwbClampWidth(drag.rawWidth);
-              if (drag.raf !== null) return;
-              drag.raf = requestAnimationFrame(() => {
-                drag.raf = null;
+              // 不用 setPointerCapture：列宽变化触发 grid 重排 / 组件重渲染时，
+              // capture 会随节点替换隐式释放，后续 move 事件丢失（卡顿根因）。
+              // 改在 window 上监听原生 pointer 事件，与 DOM 结构变化无关。
+              const onMove = (moveEvent) => {
+                const drag = dragRef.current;
+                if (drag === null) return;
+                const dx = moveEvent.clientX - drag.startX;
+                if (Math.abs(dx) > 3) drag.moved = true;
+                if (!drag.moved) return;
+                // rawWidth 不钳制：用于「拖到很窄自动收起」判断。
+                drag.rawWidth = drag.startWidth - dx;
+                drag.lastWidth = ddwbClampWidth(drag.rawWidth);
+                // 同步写轨道（不经 rAF / React state）：拖动中宽度实时跟手。
                 // 拖到很窄（< 200px）→ 自动收起：轨道归 0、结束拖拽状态。
                 if (drag.rawWidth < ddwbCollapseWidth) {
-                  if (typeof ddwbBridge.setDragging === "function") {
-                    ddwbBridge.setDragging(false);
-                  }
                   dragRef.current = null;
+                  cleanup();
                   if (typeof ddwbBridge.setTrack === "function") {
                     ddwbBridge.setTrack(0);
                   }
-                  setLayout((prev) => ({ ...prev, open: false }));
+                  service.setOpen(false);
                   return;
                 }
-                // 常规拖拽：rAF 节流后同步轨道（写 CSS 变量，不经过 React state）。
                 if (typeof ddwbBridge.setTrack === "function") {
                   ddwbBridge.setTrack(drag.lastWidth);
                 }
-              });
-            },
-            onPointerUp: (event) => {
-              const drag = dragRef.current;
-              if (drag === null) return;
-              dragRef.current = null;
-              if (drag.raf !== null) {
-                cancelAnimationFrame(drag.raf);
-                drag.raf = null;
-              }
-              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                event.currentTarget.releasePointerCapture(event.pointerId);
-              }
-              if (typeof ddwbBridge.setDragging === "function") {
-                ddwbBridge.setDragging(false);
-              }
-              if (drag.moved) {
+              };
+              const onUp = (upEvent) => {
+                const drag = dragRef.current;
+                dragRef.current = null;
+                cleanup();
+                if (typeof ddwbBridge.setDragging === "function") {
+                  ddwbBridge.setDragging(false);
+                }
+                if (!drag || !drag.moved) return;
                 if (drag.rawWidth < ddwbCollapseWidth) {
-                  // 快速拖放：rAF 未及触发但宽度已低于收起阈值 → 直接收起。
-                  if (typeof ddwbBridge.setDragging === "function") {
-                    ddwbBridge.setDragging(false);
-                  }
+                  // 快速拖放：宽度已低于收起阈值 → 直接收起。
                   if (typeof ddwbBridge.setTrack === "function") {
                     ddwbBridge.setTrack(0);
                   }
-                  setLayout((prev) => ({ ...prev, open: false }));
+                  service.setOpen(false);
                 } else {
                   // 拖拽结束：收敛一次状态（触发布局持久化），列宽已实时写入轨道。
                   setLayout((prev) => ({ ...prev, width: drag.lastWidth }));
                 }
-              } else {
-                // 未产生位移 = 点击 → 收起。
-                setLayout((prev) => ({ ...prev, open: false }));
-              }
+              };
+              const cleanup = () => {
+                window.removeEventListener("pointermove", onMove);
+                window.removeEventListener("pointerup", onUp);
+              };
+              window.addEventListener("pointermove", onMove);
+              window.addEventListener("pointerup", onUp);
+              dragRef.current._cleanup = cleanup;
             },
+            onPointerMove: () => {},
+            onPointerUp: () => {},
           }),
           jsxs("div", {
             className: "ddwb_header",
             children: [
-              // 第一行标题：与官方 titleRow（min-height 32px）同构撑高，
-              // 让 tabs 行落在与官方页签相同的水平线；同时显示「工作台」
-              // 标题，0–32px 区域不再空白。
-              jsx("div", {
-                className: "ddwb_titleRow",
-                children: jsx("span", {
-                  className: "ddwb_title",
-                  children: t("panel.title"),
-                }),
-              }),
               jsxs("div", {
                 className: "ddwb_tabsRow",
                 children: [
@@ -847,19 +885,7 @@ window.__ModuleLoader__.load({
                       ),
                     ),
                   }),
-                  // 右侧工具按钮：关闭工作台（收起面板，轨道归 0）。
-                  jsx("button", {
-                    type: "button",
-                    className: "ddwb_toolBtn",
-                    "aria-label": t("closePanel"),
-                    title: t("closePanel"),
-                    onClick: () =>
-                      setLayout((prev) => ({ ...prev, open: false })),
-                    children: jsx(IconChevronRightOutline14, {
-                      size: 14,
-                      "aria-hidden": true,
-                    }),
-                  }),
+                  // 无关闭按钮：收起统一走 Header [|] 按钮。
                 ],
               }),
             ],
@@ -869,13 +895,11 @@ window.__ModuleLoader__.load({
       });
     }
 
-    /** 挂载工作台列 + 注册示例 Tab/viewer；返回 disposer。 */
+    /** 挂载工作台列（对话页根内右侧分栏，与 scrollBody 平级）；返回 disposer。 */
     function installDock(ctx, service, t) {
       const disposers = [];
       const column = document.createElement("div");
       column.className = "ddwb_col";
-      column.style.gridColumn = "4";
-      column.style.gridRow = "1";
       column.dataset.ddwbTrack = String(ddwbBridge.trackWidth);
       ddwbBridge.node = column;
       const root = react_dom_client.createRoot(column);
@@ -890,33 +914,86 @@ window.__ModuleLoader__.load({
         root.unmount();
       });
 
-      // 接入 AppFrame grid：frame 可能晚于插件出现，重试直至挂上。
-      // dispose 必须终止重试：否则已卸载的列会在后续 attach 时被“复活”，
-      // 造成列叠加 / Tab 重复。
+      // 接入对话页根（[data-phase]）：页面可能晚于插件出现（页面加载 /
+      // 会话切换），用 MutationObserver 跟随根的出现、消失与重建。
+      // 列挂在与 scrollBody 平级的外层：滚轮 / 滚动条与聊天区互不干扰；
+      // [data-chat-flow] 消失（切到轨迹页或会话未就绪）时把轨道钳 0
+      // （隐藏），重新出现时恢复轨道。
+      // 会话切换时根整棵重建（列随销毁）——检测宿主变化后重新挂载。
+      // dispose 必须终止观察：否则已卸载的列会在后续 attach 时被“复活”。
       let attached = null;
       let disposed = false;
-      let retryTimer = null;
-      let attempts = 0;
       const tryAttach = () => {
-        if (attached !== null || disposed) return;
-        const frame = findAppFrame();
-        if (frame === null) {
-          if (attempts < 50) {
-            attempts += 1;
-            retryTimer = setTimeout(tryAttach, ddwbSessionRetryMs);
-          }
-          return;
-        }
-        attached = attachToFrame(frame, column);
+        if (disposed) return;
+        const root = findRoot();
+        if (root === null) return;
+        // 宿主已变（会话切换重建）或尚未挂载 → 重挂。
+        if (attached !== null && attached.host === root) return;
+        if (attached !== null) attached.dispose();
+        attached = null;
+        if (!root.contains(column)) root.appendChild(column);
+        attached = attachToRoot(root, column);
         ddwbBridge.setTrack = (width) => attached.setTrack(width);
         ddwbBridge.setDragging = (on) => attached.setDragging(on);
         ddwbBridge.setTrack(ddwbBridge.trackWidth);
+        // 对话视图不在（无会话 / 轨迹页）：轨道钳 0。
+        if (findChatFlow() === null && typeof ddwbBridge.setTrack === "function") {
+          ddwbBridge.setTrack(0);
+        }
       };
+      const detach = () => {
+        if (attached !== null) {
+          attached.dispose();
+          attached = null;
+        }
+        ddwbBridge.setTrack = null;
+        ddwbBridge.setDragging = null;
+      };
+      // 根出现/消失（会话打开/关闭、页面加载、会话切换重建）→ attach/detach。
+      // [data-chat-flow] 出现/消失（对话 ↔ 轨迹视图切换）→ 恢复/钳 0 轨道。
+      // 注意：只在 flow 状态【切换】时设置轨道——拖动调宽会改变 grid 布局
+      // 触发本观察器，若每次都用 trackWidth（打开时快照）覆盖轨道，拖动中
+      // 的实时宽度会被立刻重置回原值（卡顿根因）。
+      let lastShow = null;
+      let lastHistoryLoading = null;
+      const checkHistoryLoading = () => {
+        const loading = findHistoryLoading();
+        if (loading !== lastHistoryLoading) {
+          lastHistoryLoading = loading;
+          service.setHistoryLoading(loading);
+        }
+      };
+      const flowObserver = new MutationObserver(() => {
+        if (disposed) return;
+        checkHistoryLoading();
+        if (findRoot() !== null) {
+          tryAttach();
+          const show = findChatFlow() !== null;
+          if (show !== lastShow) {
+            lastShow = show;
+            const target = show ? ddwbBridge.trackWidth : 0;
+            if (typeof ddwbBridge.setTrack === "function") {
+              ddwbBridge.setTrack(target);
+            }
+          }
+        } else {
+          lastShow = null;
+          detach();
+        }
+      });
+      flowObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+      disposers.push(() => {
+        flowObserver.disconnect();
+      });
+      checkHistoryLoading();
       tryAttach();
 
       return () => {
         disposed = true;
-        if (retryTimer !== null) clearTimeout(retryTimer);
+        flowObserver.disconnect();
         for (const dispose of disposers) dispose();
         if (attached !== null) attached.dispose();
         ddwbBridge.setTrack = null;
@@ -926,30 +1003,88 @@ window.__ModuleLoader__.load({
     }
     //#endregion
 
+    //#region Header [|] 开合按钮
+    // 官方图标库只有 IconPanelLeftOutline16（左侧面板样式）；工作台在对话页
+    // 右侧，把官方左面板图标水平翻转（scaleX(-1)）呈现「右侧面板」效果。
+    function PanelRightIcon(props) {
+      return jsx(IconPanelLeftOutline16, {
+        ...props,
+        className: "ddwb_panelRight",
+        "aria-hidden": true,
+      });
+    }
+    /** 官方 Header 页签行右端的 [|] 按钮：切换工作台开合（开着时高亮）。 */
+    function WorkbenchToggleHeaderAction({ workbench, t }) {
+      const [open, setOpen] = react.useState(() => workbench.isOpen());
+      const [historyLoading, setHistoryLoading] = react.useState(() =>
+        workbench.isHistoryLoading(),
+      );
+      react.useEffect(
+        () => workbench.onOpenChange(setOpen),
+        [workbench],
+      );
+      react.useEffect(
+        () => workbench.onHistoryLoadingChange(setHistoryLoading),
+        [workbench],
+      );
+      return jsx("button", {
+        type: "button",
+        className: "ddwb_toggleBtn" + (open ? " ddwb_toggleBtnActive" : ""),
+        disabled: historyLoading,
+        title: historyLoading
+          ? t("loadingDisabledTitle")
+          : open
+            ? t("closePanel")
+            : t("openPanel"),
+        "aria-label": historyLoading
+          ? t("loadingDisabledTitle")
+          : open
+            ? t("closePanel")
+            : t("openPanel"),
+        onClick: () => workbench.toggle(),
+        children: [
+          jsx(PanelRightIcon, {
+            size: 12,
+          }),
+          jsx("span", {
+            children: t("toggle.label"),
+          }),
+        ],
+      });
+    }
+    //#endregion
+
     //#region 词典
     const zh = {
       "feature.title": "工作台框架",
-      "feature.description": "右侧分栏工作台容器与面板布局，文件 / 终端 / Git 等功能的宿主",
-      "panel.title": "工作台",
+      "feature.description":
+        "对话页右侧分栏工作台：文件 / Git 等功能面板与对话并存显示（页签行 [|] 按钮开关）",
+      "toggle.label": "工作台",
       "openPanel": "打开工作台",
       "closePanel": "关闭工作台",
+      "loadingDisabledTitle": "历史消息加载中，请稍候",
       "resizePanel": "拖拽调整宽度，点击收起",
+      "pickTitle": "选择一个功能标签页",
+      "pickHint": "从上方标签栏选择（文件 / Git 等）开始使用",
       "emptyTitle": "工作台为空",
-      "emptyHint": "功能插件（文件 / 终端 / Git）安装后，它们的标签页会出现在这里",
+      "emptyHint": "功能插件（文件 / Git）安装后，它们的标签页会出现在这里",
       "noViewerTitle": "无法预览此文件",
       "noViewerHint": "没有匹配的文件预览器，请安装对应的预览插件",
     };
     const en = {
       "feature.title": "Workbench framework",
       "feature.description":
-        "Right-column workbench container and panel layout; host for the Files / Terminal / Git features",
-      "panel.title": "Workbench",
+        "Side workbench inside the chat view: Files / Git panels show beside the conversation (toggled by the [|] header button)",
+      "toggle.label": "Workbench",
       "openPanel": "Open workbench",
       "closePanel": "Close workbench",
+      "loadingDisabledTitle": "History is loading, please wait",
       "resizePanel": "Drag to resize, click to collapse",
+      "pickTitle": "Pick a feature tab",
+      "pickHint": "Choose one from the tab bar above (Files / Git, …) to get started",
       "emptyTitle": "Workbench is empty",
       "emptyHint":
-        "Feature plugins (Files / Terminal / Git) will appear here once installed",
+        "Feature plugins (Files / Git) will appear here once installed",
       "noViewerTitle": "Cannot preview this file",
       "noViewerHint": "No matching file viewer; install the corresponding preview plugin",
     };
@@ -994,12 +1129,28 @@ window.__ModuleLoader__.load({
         ),
       );
 
+      // Header 页签行右端 [|] 开合按钮（与打开工作区 / 导出会话同排）。
+      const installToggle = () =>
+        ctx.slots.inject("conversation.session.header.utilities", () =>
+          ctx.slots.register(
+            {
+              name: "conversation.session.header.utilities",
+              id: "workbench-toggle",
+              order: 35,
+              locale: NS,
+              inject: () => ({ workbench: service }),
+            },
+            WorkbenchToggleHeaderAction,
+          ),
+        );
+
       // 行为安装：默认全开先装，配置到达后收敛。
       const installFeature = (config) => {
         const disposers = [];
         if (config.enabled) {
           const dispose = installDock(ctx, service, t);
           if (typeof dispose === "function") disposers.push(dispose);
+          disposers.push(installToggle());
         }
         return disposers;
       };

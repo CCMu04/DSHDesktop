@@ -216,10 +216,44 @@ window.__ModuleLoader__.load({
     const ddffRetryLimit = 20;
     /** 文件子页签上限。 */
     const ddffMaxFiles = 20;
-    /** 目录树隐藏状态持久化 key（localStorage）。 */
-    const TREE_COLLAPSED_KEY = "dsh-desktop-files:treeCollapsed";
-    /** 代码预览自动换行状态持久化 key（localStorage）。 */
-    const WRAP_KEY = "dsh-desktop-files:wrap";
+    /**
+     * 偏好持久化走 host 端 /api/desktop-workbench/prefs（与工作台布局同一
+     * 文档、同一文件）。不能用 localStorage：后端端口每次启动随机变化，
+     * web origin 随之变化，localStorage 在重启后整体失效。
+     */
+    const PREF_URL = "/api/desktop-workbench/prefs";
+    const PREF_TREE_COLLAPSED = "files.treeCollapsed";
+    const PREF_TREE_WIDTH = "files.treeWidth";
+    const PREF_WRAP = "files.wrapMode";
+    const ddffPrefSaveDebounceMs = 400;
+
+    /** 读取全局偏好：失败回退空对象。 */
+    function loadFilePrefs() {
+      return fetch(PREF_URL, {
+        headers: { accept: "application/json" },
+        cache: "no-store",
+      })
+        .then((res) =>
+          res.ok
+            ? res.json()
+            : Promise.reject(new Error("prefs-http-" + res.status)),
+        )
+        .then((body) =>
+          body && typeof body.prefs === "object" && body.prefs !== null
+            ? body.prefs
+            : {},
+        )
+        .catch(() => ({}));
+    }
+
+    /** 写入偏好（白名单字段由 host 端窄化）。 */
+    function saveFilePrefs(patch) {
+      return fetch(PREF_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prefs: patch }),
+      }).catch(() => {});
+    }
 
     /** 当前会话 id / cwd（模块级 store，viewer 组件拼 URL 用）。 */
     const ddffStore = {
@@ -227,6 +261,10 @@ window.__ModuleLoader__.load({
       cwd: null,
       listeners: new Set(),
       update(sessionId, cwd) {
+        // 幂等保护：官方 sessions.list 在 AI 对话期间会因投影/任务帧
+        // 频繁通知（快照本身不比较），current/cwd 未变时不得重发——
+        // 否则 FilesPanel 每次都会清空目录树重载（对话中持续闪烁）。
+        if (this.sessionId === sessionId && this.cwd === cwd) return;
         this.sessionId = sessionId;
         this.cwd = cwd;
         for (const listener of Array.from(this.listeners)) {
@@ -305,6 +343,50 @@ window.__ModuleLoader__.load({
       },
       getSnapshot() {
         return { files: [...this.files], active: this.active };
+      },
+      subscribe(listener) {
+        this.listeners.add(listener);
+        return () => this.listeners.delete(listener);
+      },
+    };
+
+    /**
+     * 目录树展开状态 + 目录内容缓存（模块级 store）。
+     * 页签切换（文件 ↔ Git）时 FilesPanel 组件卸载重挂，组件本地 state
+     * 会全部丢失（目录树被收起）；提到模块级可跨挂载保留。会话 / cwd
+     * 变化时由 installFiles 的订阅清空（不同项目目录不串扰）。
+     */
+    const treeStore = {
+      expanded: {}, // path -> true
+      entries: {}, // path -> entries[]
+      listeners: new Set(),
+      notify() {
+        const snapshot = this.getSnapshot();
+        for (const listener of Array.from(this.listeners)) {
+          try {
+            listener(snapshot);
+          } catch {
+            // A failing listener must not break the store.
+          }
+        }
+      },
+      setExpanded(path, value) {
+        if (this.expanded[path] === value) return;
+        this.expanded = { ...this.expanded, [path]: value };
+        this.notify();
+      },
+      setEntries(dirPath, entries) {
+        if (this.entries[dirPath] === entries) return;
+        this.entries = { ...this.entries, [dirPath]: entries };
+        this.notify();
+      },
+      clear() {
+        this.expanded = {};
+        this.entries = {};
+        this.notify();
+      },
+      getSnapshot() {
+        return { expanded: this.expanded, entries: this.entries };
       },
       subscribe(listener) {
         this.listeners.add(listener);
@@ -803,8 +885,11 @@ window.__ModuleLoader__.load({
       const [filesSnap, setFilesSnap] = react.useState(() =>
         filesStore.getSnapshot(),
       );
-      const [entries, setEntries] = react.useState({}); // path -> entries[]
-      const [expanded, setExpanded] = react.useState({}); // path -> true
+      // 目录树状态（展开 + 内容缓存）走模块级 treeStore：页签切换
+      // （文件 ↔ Git）时组件卸载重挂，本地 state 会丢（目录树收起）。
+      const [treeSnap, setTreeSnap] = react.useState(() =>
+        treeStore.getSnapshot(),
+      );
       const [loading, setLoading] = react.useState(null); // 正在加载的目录
       const [fatal, setFatal] = react.useState(null);
       // 资源管理器显示失败反馈（短暂显示后自动消失）+ 防连点。
@@ -815,62 +900,91 @@ window.__ModuleLoader__.load({
       const [openError, setOpenError] = react.useState(false);
       const openErrorTimer = react.useRef(null);
       const [openPending, setOpenPending] = react.useState(false);
-      // 目录树隐藏状态：localStorage 持久化（关闭工作台再打开时保持上次选择）。
-      const [treeCollapsed, setTreeCollapsed] = react.useState(() => {
-        try {
-          return localStorage.getItem(TREE_COLLAPSED_KEY) === "1";
-        } catch {
-          return false;
-        }
-      });
+      // 目录树隐藏状态 + 目录树宽度 + 代码自动换行：host 端 prefs 持久化
+      // （后端端口每次启动变化，localStorage 跨重启失效；host 端文档
+      // 原子写入，与工作台布局同文件）。
+      const [treeCollapsed, setTreeCollapsed] = react.useState(false);
+      const [wrapMode, setWrapMode] = react.useState(false);
+      // 挂载时应用已保存偏好（异步：先默认值渲染，到达后收敛）。
       react.useEffect(() => {
-        try {
-          localStorage.setItem(TREE_COLLAPSED_KEY, treeCollapsed ? "1" : "0");
-        } catch {
-          // localStorage 不可用时仅失去持久化，不影响使用。
+        let current = true;
+        loadFilePrefs().then((prefs) => {
+          if (current) {
+            if (typeof prefs[PREF_TREE_COLLAPSED] === "boolean") {
+              setTreeCollapsed(prefs[PREF_TREE_COLLAPSED]);
+            }
+            if (typeof prefs[PREF_WRAP] === "boolean") {
+              setWrapMode(prefs[PREF_WRAP]);
+            }
+          }
+        });
+        return () => {
+          current = false;
+        };
+      }, []);
+      // 偏好变更 → 防抖写回（初始加载应用旧值不触发，值与 state 相同）。
+      const prefsTimer = react.useRef(null);
+      const schedulePrefSave = (patch) => {
+        if (prefsTimer.current !== null) {
+          clearTimeout(prefsTimer.current);
         }
+        prefsTimer.current = window.setTimeout(
+          () => saveFilePrefs(patch),
+          ddffPrefSaveDebounceMs,
+        );
+      };
+      react.useEffect(() => {
+        schedulePrefSave({ [PREF_TREE_COLLAPSED]: treeCollapsed });
       }, [treeCollapsed]);
-      // 代码预览自动换行：长行折行显示（localStorage 持久化）。
-      const [wrapMode, setWrapMode] = react.useState(() => {
-        try {
-          return localStorage.getItem(WRAP_KEY) === "1";
-        } catch {
-          return false;
-        }
-      });
       react.useEffect(() => {
-        try {
-          localStorage.setItem(WRAP_KEY, wrapMode ? "1" : "0");
-        } catch {
-          // localStorage 不可用时仅失去持久化，不影响使用。
-        }
+        schedulePrefSave({ [PREF_WRAP]: wrapMode });
       }, [wrapMode]);
+      react.useEffect(
+        () => () => {
+          if (prefsTimer.current !== null) {
+            clearTimeout(prefsTimer.current);
+          }
+        },
+        [],
+      );
 
-      // 会话 / cwd 变化 → 重置树与文件页签，并自动加载根目录内容
-      // （根目录行不显示，直接从 cwd 的内容开始展示）。
+      // loadDir 经 ref 转发：订阅回调（挂载时注册）始终调用最新实现，
+      // 且用 ref 做并发守卫（闭包捕获的 state 会陈旧）。
+      const loadingRef = react.useRef(null);
+      const loadDirRef = react.useRef(() => {});
+      // 会话 / cwd 变化 → 重置文件页签并自动加载根目录内容
+      // （根目录行不显示，直接从 cwd 的内容开始展示）。目录树的
+      // 展开/内容清理由模块级订阅负责（组件卸载时也生效）。
       react.useEffect(() => {
         const offSession = ddffStore.subscribe((next) => {
           setSessionSnap(next);
-          setEntries({});
-          setExpanded({});
           setFatal(null);
-          if (next.cwd !== null) loadDir(next.cwd);
+          if (next.cwd !== null) loadDirRef.current(next.cwd);
         });
         const offFiles = filesStore.subscribe(setFilesSnap);
+        const offTree = treeStore.subscribe(setTreeSnap);
         // 挂载即加载：工作台关闭再打开时组件重新挂载，但 store 没有
         // 新事件、订阅不会触发，需按当前快照立即加载根目录，
-        // 否则目录树空白（要手动点刷新才出现）。
+        // 否则目录树空白（要手动点刷新才出现）；treeStore 已有该目录
+        // 缓存（页签切换回来）则直接显示，不重复加载。
         const initial = ddffStore.getSnapshot();
-        if (initial.cwd !== null) loadDir(initial.cwd);
+        if (
+          initial.cwd !== null &&
+          treeStore.getSnapshot().entries[initial.cwd] === undefined
+        ) {
+          loadDirRef.current(initial.cwd);
+        }
         return () => {
           offSession();
           offFiles();
+          offTree();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, []);
 
       const loadDir = (dirPath) => {
-        if (loading !== null) return;
+        if (loadingRef.current !== null) return;
+        loadingRef.current = dirPath;
         setLoading(dirPath);
         fetch(ddffUrl(TREE_URL, dirPath), { cache: "no-store" })
           .then((res) =>
@@ -879,24 +993,27 @@ window.__ModuleLoader__.load({
               : Promise.reject(new Error("http-" + res.status)),
           )
           .then((body) => {
-            setEntries((prev) => ({
-              ...prev,
-              [dirPath]: Array.isArray(body?.entries) ? body.entries : [],
-            }));
+            treeStore.setEntries(
+              dirPath,
+              Array.isArray(body?.entries) ? body.entries : [],
+            );
+            loadingRef.current = null;
             setLoading(null);
           })
           .catch(() => {
+            loadingRef.current = null;
             setLoading(null);
             setFatal(t("panel.loadFailed"));
           });
       };
+      loadDirRef.current = loadDir;
 
       const toggleDir = (dirPath) => {
-        if (expanded[dirPath] !== true) {
-          setExpanded((prev) => ({ ...prev, [dirPath]: true }));
-          if (entries[dirPath] === undefined) loadDir(dirPath);
+        if (treeSnap.expanded[dirPath] !== true) {
+          treeStore.setExpanded(dirPath, true);
+          if (treeSnap.entries[dirPath] === undefined) loadDir(dirPath);
         } else {
-          setExpanded((prev) => ({ ...prev, [dirPath]: false }));
+          treeStore.setExpanded(dirPath, false);
         }
       };
 
@@ -925,7 +1042,8 @@ window.__ModuleLoader__.load({
         }
       };
 
-      // 目录树宽度（px，可拖拽调整）：默认窄（140px），范围 100–280。
+      // 目录树宽度（px，可拖拽调整）：默认窄（140px），范围 100–280，
+      // host 端 prefs 持久化。
       const [treeWidth, setTreeWidth] = react.useState(140);
       const treeDragRef = react.useRef(null);
       const onTreeHandleDown = (event) => {
@@ -956,6 +1074,27 @@ window.__ModuleLoader__.load({
       };
       const treeWidthRef = react.useRef(treeWidth);
       treeWidthRef.current = treeWidth;
+      // 挂载时恢复已保存的树宽度；变更防抖写回。
+      react.useEffect(() => {
+        let current = true;
+        loadFilePrefs().then((prefs) => {
+          if (
+            current &&
+            typeof prefs[PREF_TREE_WIDTH] === "number" &&
+            Number.isFinite(prefs[PREF_TREE_WIDTH])
+          ) {
+            setTreeWidth(
+              Math.min(280, Math.max(100, Math.round(prefs[PREF_TREE_WIDTH]))),
+            );
+          }
+        });
+        return () => {
+          current = false;
+        };
+      }, []);
+      react.useEffect(() => {
+        schedulePrefSave({ [PREF_TREE_WIDTH]: treeWidth });
+      }, [treeWidth]);
 
       const cwd = sessionSnap.cwd;
       const activeFile =
@@ -965,9 +1104,9 @@ window.__ModuleLoader__.load({
       const activeViewer =
         activeFile !== null ? viewerById(activeFile.viewerId) : null;
 
-      // 递归渲染目录行（依赖组件内 entries/expanded/loading 状态）。
+      // 递归渲染目录行（依赖 treeStore 的 entries/expanded + loading 状态）。
       const renderChildren = (dirPath, depth) => {
-        const list = entries[dirPath];
+        const list = treeSnap.entries[dirPath];
         if (list === undefined) return null;
         return list.map((entry) => {
           const entryPath = ddffJoin(dirPath, entry.name);
@@ -990,7 +1129,7 @@ window.__ModuleLoader__.load({
                 ? jsx("span", {
                     className: "ddff_dirIcon",
                     children: jsx(
-                      expanded[entryPath] === true
+                      treeSnap.expanded[entryPath] === true
                         ? FolderOpenIcon
                         : FolderIcon,
                       { size: 14 },
@@ -1021,7 +1160,7 @@ window.__ModuleLoader__.load({
             key: entryPath,
             children: [
               row,
-              expanded[entryPath] === true
+              treeSnap.expanded[entryPath] === true
                 ? renderChildren(entryPath, depth + 1)
                 : null,
             ],
@@ -1196,7 +1335,7 @@ window.__ModuleLoader__.load({
                     "aria-label": t("panel.toggleTree"),
                     onClick: () => setTreeCollapsed((value) => !value),
                     children: jsx(treeCollapsed ? EyeOffIcon : EyeIcon, {
-                      size: 14,
+                      size: 16,
                     }),
                   }),
                   jsx("button", {
@@ -1205,13 +1344,12 @@ window.__ModuleLoader__.load({
                     title: t("panel.refresh"),
                     "aria-label": t("panel.refresh"),
                     onClick: () => {
-                      setEntries({});
-                      setExpanded({});
+                      treeStore.clear();
                       setFatal(null);
                       loadDir(cwd);
                     },
                     children: jsx(RefreshCwIcon, {
-                      size: 14,
+                      size: 16,
                     }),
                   }),
                 ],
@@ -1266,7 +1404,7 @@ window.__ModuleLoader__.load({
                                 })
                                 .finally(() => setRevealPending(false));
                             },
-                            children: jsx(FolderSearchIcon, { size: 14 }),
+                            children: jsx(FolderSearchIcon, { size: 16 }),
                           }),
                           // 自动换行切换：代码预览长行折行显示。
                           jsx("button", {
@@ -1277,7 +1415,7 @@ window.__ModuleLoader__.load({
                             title: t("panel.toggleWrap"),
                             "aria-label": t("panel.toggleWrap"),
                             onClick: () => setWrapMode((value) => !value),
-                            children: jsx(WrapTextIcon, { size: 14 }),
+                            children: jsx(WrapTextIcon, { size: 16 }),
                           }),
                         ],
                       })
@@ -1494,6 +1632,14 @@ window.__ModuleLoader__.load({
         disposers.push(() => {
           if (typeof listOff === "function") listOff();
         });
+
+        // 目录树状态跟随会话（模块级订阅：组件卸载时也生效）：cwd 变化
+        // 时清空展开/内容缓存（不同项目目录不串扰；ddffStore.update 的
+        // 幂等保护保证同 cwd 的通知不会误清）。
+        const treeSessionOff = ddffStore.subscribe(() => {
+          treeStore.clear();
+        });
+        disposers.push(treeSessionOff);
 
         // FilesPanel 由 workbench 渲染时会收到 workbench 词典的 t，
         // 这里用 files 自己的 t 覆盖，保证面板文案来自 desktop-files 词典。
