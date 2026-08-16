@@ -810,17 +810,29 @@ async function createWindow() {
 }
 
 async function launch() {
+  appendBackendOutput('[launch] createWindow…\n')
   await createWindow()
+  appendBackendOutput('[launch] window created\n')
   await preparePackagedRuntime()
+  appendBackendOutput('[launch] runtime prepared\n')
   const context = prepareBackendContext()
   await setLoadingStatus('正在准备内置桌面插件…')
   await prepareBundledPlugins(context)
+  appendBackendOutput('[launch] plugins prepared\n')
   await setLoadingStatus('正在启动本地服务…')
   const port = await reservePort()
   backendOrigin = `http://${backendHost}:${port}`
   startBackend(port, context)
   await waitForBackend(`${backendOrigin}/`)
-  await mainWindow.loadURL(`${backendOrigin}/`)
+  appendBackendOutput(`[launch] backend ready at ${backendOrigin}\n`)
+  // loadURL 的 promise 在个别环境下可能不落定（页面已显示但 did-finish-load
+  // 未触发），死等会卡住 launch() 之后的所有初始化（含自动更新）。
+  // 加超时兜底：页面照常显示，初始化继续。
+  const loadResult = await Promise.race([
+    mainWindow.loadURL(`${backendOrigin}/`),
+    new Promise((resolve) => setTimeout(() => resolve('timeout'), 60_000)),
+  ])
+  appendBackendOutput(`[launch] loadURL settled: ${loadResult === 'timeout' ? 'timeout(60s)' : 'ok'}\n`)
 }
 
 function stopBackend() {
