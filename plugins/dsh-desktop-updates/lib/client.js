@@ -75,11 +75,12 @@ window.__ModuleLoader__.load({
     const updatesTagId = "dsh-desktop-updates/UpdatesSection.module.css";
     const installUpdatesCss = () => dduInstallCss(updatesCss, updatesTagId);
     // 侧边栏底部「更新」按钮。有更新时（body 标记）foot 区改横排：
-    // 设置按钮 flex:1 占满剩余宽度，更新按钮 flex:0 取自然宽度，互不交叠、
+    // 槽位顺序是 footerActions 在前、settingsArea 在后，row-reverse 后
+    // 视觉为 设置(flex:1 占满剩余) + 更新(flex:0 自然宽度)，互不交叠、
     // hover 高亮各自独立；无更新时布局完全还原。收起态（wide=false）
     // 组件不渲染，设置按钮图标不受影响。
     const sidebarCss =
-      ".dduiU_sideBtn{height:32px;padding:0 12px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-button-elevated-fill);color:var(--dsw-alias-label-primary);font-size:13px;line-height:1;white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}.dduiU_sideBtn:hover{background:var(--dsw-alias-button-floating-hover)}body.ddu-update-available [class$=\"_footArea\"]{flex-direction:row;align-items:center;gap:8px}body.ddu-update-available [class$=\"_settingsArea\"]{flex:1 1 auto;min-width:0;width:auto}body.ddu-update-available [class$=\"_footerActions\"]{flex:0 0 auto;width:auto;height:auto;overflow:visible}";
+      ".dduiU_sideBtn{height:32px;padding:0 12px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-button-elevated-fill);color:var(--dsw-alias-label-primary);font-size:13px;line-height:1;white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}.dduiU_sideBtn:hover{background:var(--dsw-alias-button-floating-hover)}body.ddu-update-available [class$=\"_footArea\"]{flex-direction:row-reverse;align-items:center;gap:8px}body.ddu-update-available [class$=\"_settingsArea\"]{flex:1 1 auto;min-width:0;width:auto}body.ddu-update-available [class$=\"_footerActions\"]{flex:0 0 auto;width:auto;height:auto;overflow:visible}";
     const sidebarTagId = "dsh-desktop-updates/SidebarUpdateAction.module.css";
     const installSidebarCss = () => dduInstallCss(sidebarCss, sidebarTagId);
     //#endregion
