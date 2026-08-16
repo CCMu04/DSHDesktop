@@ -130,7 +130,10 @@ window.__ModuleLoader__.load({
     let dduUpdateListeners = new Set();
     function setUpdateState(patch) {
       Object.assign(dduUpdateState, patch);
-      for (const fn of dduUpdateListeners) fn(dduUpdateState);
+      // 发给监听器的是新引用快照：React setState 对同一对象引用会
+      // bail-out 不重渲染（此前的原地变更导致弹窗宿主永不刷新）。
+      const snapshot = { ...dduUpdateState };
+      for (const fn of dduUpdateListeners) fn(snapshot);
     }
     function getUpdateState() {
       return dduUpdateState;
