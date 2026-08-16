@@ -716,6 +716,11 @@ function configureNavigation(window) {
   window.webContents.on('console-message', details => {
     const message = details?.message
     if (typeof message !== 'string') return
+    // 更新插件诊断标记：写入 backend.log 便于排查。
+    if (message.startsWith('__DSH_DESKTOP_UPDATE_DBG__:')) {
+      appendBackendOutput(`[upd-dbg] ${message.slice('__DSH_DESKTOP_UPDATE_DBG__:'.length)}\n`)
+      return
+    }
     if (message.startsWith(desktopWakeMarker)) {
       showMainWindow()
       return

@@ -150,6 +150,7 @@ window.__ModuleLoader__.load({
 
     /** 打开更新弹窗。 */
     function openUpdateDialog() {
+      dduDbg("openUpdateDialog called");
       setUpdateState({ dialogOpen: true });
     }
     function closeUpdateDialog() {
@@ -235,6 +236,13 @@ window.__ModuleLoader__.load({
             ? info.dismissedVersion
             : null;
         const state = getUpdateState();
+        dduDbg(
+          "refresh: newer=" + latest.tag_name +
+            " kind=" + String(dduInstallKind) +
+            " dismissed=" + String(dismissed) +
+            " phase=" + state.phase +
+            " dialogOpen=" + state.dialogOpen,
+        );
         if (
           dduInstallKind === "installer" &&
           dismissed !== latest.tag_name &&
@@ -243,6 +251,7 @@ window.__ModuleLoader__.load({
           state.dialogOpen === false
         ) {
           setUpdateState({ phase: "available", dialogOpen: true });
+          dduDbg("refresh: auto-popup opened");
         }
       } else if (
         latest !== null &&
@@ -298,6 +307,13 @@ window.__ModuleLoader__.load({
     //#region 自动检查辅助
     /** 渲染进程 → 主进程的自动更新命令标记（与主题标记同通道）。 */
     const desktopUpdateMarker = "__DSH_DESKTOP_UPDATE__:";
+    /** 渲染进程 → 主进程的诊断标记：主进程会把内容写入 backend.log。 */
+    const desktopUpdateDbgMarker = "__DSH_DESKTOP_UPDATE_DBG__:";
+    function dduDbg(message) {
+      try {
+        console.log(desktopUpdateDbgMarker + message);
+      } catch {}
+    }
     /** GitHub Releases API（未认证，60 次/小时/IP；配合本地缓存降低占用）。 */
     const LATEST_RELEASE_URL =
       "https://api.github.com/repos/CCMu04/DSHDesktop/releases/latest";
@@ -903,8 +919,15 @@ window.__ModuleLoader__.load({
                   typeof clientEntry.createRoot === "function"
                 ) {
                   createRootFn = clientEntry.createRoot;
+                } else {
+                  dduDbg(
+                    "dialog host: react-dom/client.createRoot missing, keys=" +
+                      Object.keys(clientEntry ?? {}).join(","),
+                  );
                 }
-              } catch {}
+              } catch (error) {
+                dduDbg("dialog host: require react-dom/client failed: " + String(error));
+              }
               if (
                 createRootFn === null &&
                 react_dom !== null &&
@@ -913,12 +936,14 @@ window.__ModuleLoader__.load({
                 createRootFn = react_dom.createRoot;
               }
               if (createRootFn === null || typeof document === "undefined") {
+                dduDbg("dialog host: no createRoot available, skipped");
                 return () => {};
               }
               const container = document.createElement("div");
               document.body.appendChild(container);
               const root = createRootFn(container);
               root.render((0, react_jsx_runtime.jsx)(UpdateDialogHost, { t }));
+              dduDbg("dialog host: mounted");
               return () => {
                 try {
                   root.unmount();
@@ -926,6 +951,7 @@ window.__ModuleLoader__.load({
                 container.remove();
               };
             } catch (error) {
+              dduDbg("dialog host: mount failed: " + String(error));
               console.error(
                 "[dsh-desktop-updates] dialog host mount failed:",
                 error,
