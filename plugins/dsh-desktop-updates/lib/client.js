@@ -746,27 +746,27 @@ window.__ModuleLoader__.load({
           ],
         });
       }
-      return react_dom.createPortal(
-        (0, react_jsx_runtime.jsx)("div", {
-          // 高于官方设置抽屉（z-index 1000）的全局层，保证弹窗可点。
-          style: { position: "fixed", inset: 0, zIndex: 2000 },
-          children: (0, react_jsx_runtime.jsx)(
-            _deepseek_ai_dsh_client_ui_primitives.Modal,
-            {
-              open: true,
-              onClose: closeUpdateDialog,
-              title,
-              description,
-              closeLabel: t("updates.notNow"),
-              children: (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
-                children: [downloadProgress, remindRow],
-              }),
-              footer,
-            },
-          ),
-        }),
-        document.body,
-      );
+      // 不 createPortal：独立 root 的容器已挂在 body，Modal 直接渲染在容器内，
+      // 保证点击事件冒泡路径经过 root 容器（React 18 事件委托挂在容器上，
+      // portal 到容器外的事件永远不会被该 root 收到）。
+      return (0, react_jsx_runtime.jsx)("div", {
+        // 高于官方设置抽屉（z-index 1000）的全局层，保证弹窗可点。
+        style: { position: "fixed", inset: 0, zIndex: 2000 },
+        children: (0, react_jsx_runtime.jsx)(
+          _deepseek_ai_dsh_client_ui_primitives.Modal,
+          {
+            open: true,
+            onClose: closeUpdateDialog,
+            title,
+            description,
+            closeLabel: t("updates.notNow"),
+            children: (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, {
+              children: [downloadProgress, remindRow],
+            }),
+            footer,
+          },
+        ),
+      });
     }
 
     /**
