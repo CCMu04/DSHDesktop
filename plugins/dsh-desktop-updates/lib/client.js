@@ -69,9 +69,9 @@ window.__ModuleLoader__.load({
       document.head.appendChild(tag);
       return () => tag.remove();
     };
-    // 「检查更新」分区面板样式。
+    // 「检查更新」分区面板样式 + 原生更新弹窗样式。
     const updatesCss =
-      ".dduiU_section{width:100%;max-width:760px;color:var(--dsw-alias-label-primary);flex-direction:column;gap:16px;display:flex}.dduiU_block{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;flex-direction:column;gap:12px;padding:14px 16px;display:flex}.dduiU_row{align-items:center;justify-content:space-between;gap:12px;display:flex}.dduiU_rowLabel{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}.dduiU_rowValue{color:var(--dsw-alias-label-primary);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.5}.dduiU_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}.dduiU_dlBlock{flex-direction:column;gap:6px;display:flex}.dduiU_progress{height:6px;background:var(--dsw-alias-bg-layer-2);border-radius:3px;overflow:hidden}.dduiU_progressBar{height:100%;background:var(--dsw-alias-state-info-primary,#3b82f6);border-radius:3px;transition:width .15s ease-out}.dduiU_progressText{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5}.dduiU_remindRow{align-items:center;gap:8px;margin-top:8px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.5;cursor:pointer;display:flex}.dduiU_remindRow input{accent-color:var(--dsw-alias-state-info-primary,#3b82f6);width:14px;height:14px;margin:0;cursor:pointer}";
+      ".dduiU_section{width:100%;max-width:760px;color:var(--dsw-alias-label-primary);flex-direction:column;gap:16px;display:flex}.dduiU_block{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;flex-direction:column;gap:12px;padding:14px 16px;display:flex}.dduiU_row{align-items:center;justify-content:space-between;gap:12px;display:flex}.dduiU_rowLabel{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}.dduiU_rowValue{color:var(--dsw-alias-label-primary);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.5}.dduiU_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}@keyframes dduiU_fadeIn{from{opacity:0}}@keyframes dduiU_progressFlow{0%{background-position:0 0}100%{background-position:24px 0}}.dduiU_dlgOverlay{position:fixed;inset:0;z-index:3000;display:none;align-items:center;justify-content:center;padding:24px;animation:dduiU_fadeIn .15s ease-out}.dduiU_dlgMask{position:absolute;inset:0;background:rgba(0,0,0,.24);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}.dduiU_dlgPanel{position:relative;z-index:1;display:flex;flex-direction:column;gap:14px;width:min(400px,100%);max-height:calc(100vh - 48px);overflow:auto;box-sizing:border-box;padding:22px 24px 24px;border-radius:24px;border:1px solid var(--dsw-alias-border-inverted);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-shadow-lv3);color:var(--dsw-alias-label-primary);font-size:14px}.dduiU_dlgHeader{display:flex;align-items:center;justify-content:space-between;gap:8px}.dduiU_dlgTitle{margin:0;font-size:16px;line-height:24px;font-weight:500;color:var(--dsw-alias-label-primary)}.dduiU_dlgClose{flex:none;width:28px;height:28px;border:none;border-radius:8px;background:transparent;cursor:pointer;color:var(--dsw-alias-label-secondary);font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center}.dduiU_dlgClose:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.dduiU_dlgVersionRow{display:flex;align-items:center;gap:8px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.5;color:var(--dsw-alias-label-secondary)}.dduiU_dlgVersionRow .dduiU_dlgArrow{color:var(--dsw-alias-label-tertiary)}.dduiU_dlgVersionRow .dduiU_dlgNew{color:var(--dsw-alias-state-info-primary,#3b82f6);font-weight:600}.dduiU_dlgDesc{margin:0;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);word-break:break-word}.dduiU_dlgNotes{max-height:180px;overflow:auto;box-sizing:border-box;padding:10px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word}.dduiU_dlgBody{display:flex;flex-direction:column;min-width:0;gap:10px}.dduiU_dlgFooter{display:flex;align-items:center;justify-content:flex-end;gap:8px}.dduiU_dlgBtn{height:36px;padding:0 16px;border-radius:12px;font-size:14px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-family:inherit;background:transparent;border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);transition:background .12s ease-out}.dduiU_dlgBtn:hover{background:var(--dsw-alias-interactive-bg-hover)}.dduiU_dlgBtnPrimary{background:var(--dsw-alias-button-elevated-fill);border:1px solid transparent;color:var(--dsw-alias-label-primary);transition:filter .12s ease-out}.dduiU_dlgBtnPrimary:hover{filter:brightness(1.08);background:var(--dsw-alias-button-elevated-fill)}.dduiU_dlgProgress{height:6px;border-radius:3px;background:var(--dsw-alias-bg-layer-2);overflow:hidden}.dduiU_dlgProgressBar{height:100%;border-radius:3px;background:linear-gradient(90deg,#3b82f6,#60a5fa);background-size:24px 100%;animation:dduiU_progressFlow .8s linear infinite;transition:width .15s ease-out}.dduiU_dlgProgressText{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5}.dduiU_dlgRemind{display:flex;align-items:center;gap:8px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.5;cursor:pointer}.dduiU_dlgRemind input{accent-color:var(--dsw-alias-state-info-primary,#3b82f6);width:14px;height:14px;margin:0;cursor:pointer}";
     const updatesTagId = "dsh-desktop-updates/UpdatesSection.module.css";
     const installUpdatesCss = () => dduInstallCss(updatesCss, updatesTagId);
     // 侧边栏底部「更新」按钮样式。footer 槽位行高度压为 0，
@@ -119,6 +119,7 @@ window.__ModuleLoader__.load({
       available: false, // 存在新版本（决定侧栏「更新」按钮显隐）
       tag: null, // 新版本号（如 "v0.1.0-rc.6.6.4"）
       latest: null, // 最新版本信息（GitHub Release 精简字段）
+      currentVersion: null, // 当前应用版本
       phase: "idle", // idle | available | downloading | downloaded
       percent: 0,
       transferred: 0,
@@ -225,6 +226,9 @@ window.__ModuleLoader__.load({
         info !== null && typeof info?.currentVersion === "string"
           ? info.currentVersion
           : null;
+      if (currentVersion !== null) {
+        setUpdateState({ currentVersion });
+      }
       const newer =
         latest !== null &&
         typeof latest === "object" &&
@@ -604,8 +608,9 @@ window.__ModuleLoader__.load({
     //#region 更新弹窗（原生 DOM 实现）
     /**
      * 更新弹窗（标准更新流程），纯原生 DOM 实现：
-     *   - 发现新版本：立即更新 / 稍后 + 「下次不再自动提醒」勾选（安装版）；
-     *   - 下载中：进度条 + 已下载/总大小；
+     *   - 发现新版本：版本对比（当前 → 新）+ 发布说明 + 立即更新 / 稍后
+     *     + 「下次不再自动提醒」勾选（安装版）；
+     *   - 下载中：渐变流动进度条 + 已下载/总大小；
      *   - 已下载：立即重启安装 / 稍后（退出时自动安装）。
      * 便携版无 electron-updater：动作退化为「前往下载」（浏览器打开安装包直链）。
      *
@@ -621,11 +626,7 @@ window.__ModuleLoader__.load({
       const button = document.createElement("button");
       button.type = "button";
       button.textContent = label;
-      button.style.cssText =
-        "height:36px;padding:0 16px;border-radius:12px;font-size:14px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-family:inherit;" +
-        (primary
-          ? "background:var(--dsw-alias-button-elevated-fill);border:1px solid transparent;color:var(--dsw-alias-label-primary);"
-          : "background:transparent;border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);");
+      button.className = primary ? "dduiU_dlgBtn dduiU_dlgBtnPrimary" : "dduiU_dlgBtn";
       button.addEventListener("click", onClick);
       return button;
     }
@@ -634,7 +635,8 @@ window.__ModuleLoader__.load({
     function renderNativeDialog(t) {
       if (dduNativeDialog === null) return;
       const state = getUpdateState();
-      const { overlay, titleEl, descEl, bodyEl, footerEl } = dduNativeDialog;
+      const { overlay, titleEl, versionRowEl, notesEl, bodyEl, footerEl } =
+        dduNativeDialog;
       if (state.dialogOpen === false) {
         overlay.style.display = "none";
         return;
@@ -650,31 +652,40 @@ window.__ModuleLoader__.load({
           ? t("updates.downloadedTitle")
           : t("updates.updateAvailable")) +
         (tag === null ? "" : " " + tag);
-      const descParts = [];
-      if (latest?.published_at) {
-        descParts.push(
-          t("updates.releasedAt") + " " + String(latest.published_at).slice(0, 10),
-        );
-      }
-      if (latest?.body) descParts.push(t("updates.releaseNotes"));
-      descEl.textContent = descParts.join(" · ");
-      descEl.style.display = descParts.length === 0 ? "none" : "";
+      // 版本对比行：当前版本 → 新版本。
+      versionRowEl.replaceChildren();
+      const currentText = document.createElement("span");
+      currentText.textContent =
+        "v" +
+        (typeof state.currentVersion === "string"
+          ? state.currentVersion
+          : "?");
+      const arrow = document.createElement("span");
+      arrow.className = "dduiU_dlgArrow";
+      arrow.textContent = " → ";
+      const newText = document.createElement("span");
+      newText.className = "dduiU_dlgNew";
+      newText.textContent = tag === null ? "?" : tag;
+      versionRowEl.appendChild(currentText);
+      versionRowEl.appendChild(arrow);
+      versionRowEl.appendChild(newText);
+      // 发布说明（限高滚动）。
+      const notesText = latest?.body ? String(latest.body) : "";
+      notesEl.textContent = notesText;
+      notesEl.style.display = notesText === "" ? "none" : "";
       bodyEl.replaceChildren();
       if (downloading) {
         const block = document.createElement("div");
         block.style.cssText = "display:flex;flex-direction:column;gap:6px;";
         const bar = document.createElement("div");
-        bar.style.cssText =
-          "height:6px;border-radius:3px;background:var(--dsw-alias-bg-layer-2);overflow:hidden;";
+        bar.className = "dduiU_dlgProgress";
         const fill = document.createElement("div");
-        fill.style.cssText =
-          "height:100%;width:" +
-          Math.min(100, Math.max(0, state.percent)) +
-          "%;background:var(--dsw-alias-state-info-primary,#3b82f6);border-radius:3px;transition:width .15s ease-out;";
+        fill.className = "dduiU_dlgProgressBar";
+        fill.style.width =
+          Math.min(100, Math.max(0, state.percent)) + "%";
         bar.appendChild(fill);
         const text = document.createElement("div");
-        text.style.cssText =
-          "color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:1.5;";
+        text.className = "dduiU_dlgProgressText";
         text.textContent =
           Math.round(state.percent) +
           "% · " +
@@ -686,12 +697,9 @@ window.__ModuleLoader__.load({
         bodyEl.appendChild(block);
       } else if (isInstaller && !downloaded) {
         const label = document.createElement("label");
-        label.style.cssText =
-          "display:flex;align-items:center;gap:8px;margin-top:8px;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.5;cursor:pointer;";
+        label.className = "dduiU_dlgRemind";
         const input = document.createElement("input");
         input.type = "checkbox";
-        input.style.cssText =
-          "accent-color:var(--dsw-alias-state-info-primary,#3b82f6);width:14px;height:14px;margin:0;cursor:pointer;";
         input.addEventListener("change", () => {
           if (input.checked) dismissUpdateReminder();
         });
@@ -732,51 +740,58 @@ window.__ModuleLoader__.load({
     /** 挂载原生弹窗宿主（订阅状态，变化即重绘）。 */
     function mountNativeDialog(t) {
       if (typeof document === "undefined") return () => {};
+      // 非浏览器环境（如冒烟测试的 DOM mock 无 addEventListener）跳过挂载。
+      const probeEl = document.createElement("div");
+      if (typeof probeEl.addEventListener !== "function") return () => {};
       const overlay = document.createElement("div");
-      overlay.style.cssText =
-        "position:fixed;inset:0;z-index:3000;display:none;align-items:center;justify-content:center;padding:24px;";
+      overlay.className = "dduiU_dlgOverlay";
       const mask = document.createElement("div");
-      mask.style.cssText =
-        "position:absolute;inset:0;background:rgba(0,0,0,.24);backdrop-filter:blur(10px);";
+      mask.className = "dduiU_dlgMask";
       mask.addEventListener("click", closeUpdateDialog);
       const panel = document.createElement("div");
-      panel.style.cssText =
-        "position:relative;z-index:1;display:flex;flex-direction:column;gap:16px;width:min(380px,100%);max-height:calc(100vh - 48px);overflow:auto;box-sizing:border-box;padding:22px 24px 24px;border-radius:24px;border:1px solid var(--dsw-alias-border-inverted);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-shadow-lv3);color:var(--dsw-alias-label-primary);font-size:14px;";
+      panel.className = "dduiU_dlgPanel";
       const header = document.createElement("div");
-      header.style.cssText =
-        "display:flex;align-items:center;justify-content:space-between;gap:8px;";
+      header.className = "dduiU_dlgHeader";
       const titleEl = document.createElement("h2");
-      titleEl.style.cssText =
-        "margin:0;font-size:16px;line-height:24px;font-weight:500;color:var(--dsw-alias-label-primary);";
+      titleEl.className = "dduiU_dlgTitle";
       const closeBtn = document.createElement("button");
       closeBtn.type = "button";
       closeBtn.textContent = "×";
-      closeBtn.style.cssText =
-        "flex:none;width:28px;height:28px;border:none;border-radius:8px;background:transparent;cursor:pointer;color:var(--dsw-alias-label-secondary);font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center;";
+      closeBtn.className = "dduiU_dlgClose";
+      closeBtn.setAttribute("aria-label", t("updates.notNow"));
       closeBtn.addEventListener("click", closeUpdateDialog);
       header.appendChild(titleEl);
       header.appendChild(closeBtn);
-      const descEl = document.createElement("p");
-      descEl.style.cssText =
-        "margin:0;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary);word-break:break-word;";
+      const versionRowEl = document.createElement("div");
+      versionRowEl.className = "dduiU_dlgVersionRow";
+      const notesEl = document.createElement("div");
+      notesEl.className = "dduiU_dlgNotes";
       const bodyEl = document.createElement("div");
-      bodyEl.style.cssText = "display:flex;flex-direction:column;min-width:0;";
+      bodyEl.className = "dduiU_dlgBody";
       const footerEl = document.createElement("div");
-      footerEl.style.cssText =
-        "display:flex;align-items:center;justify-content:flex-end;gap:8px;";
+      footerEl.className = "dduiU_dlgFooter";
       panel.appendChild(header);
-      panel.appendChild(descEl);
+      panel.appendChild(versionRowEl);
+      panel.appendChild(notesEl);
       panel.appendChild(bodyEl);
       panel.appendChild(footerEl);
       overlay.appendChild(mask);
       overlay.appendChild(panel);
       document.body.appendChild(overlay);
-      dduNativeDialog = { overlay, titleEl, descEl, bodyEl, footerEl };
+      dduNativeDialog = { overlay, titleEl, versionRowEl, notesEl, bodyEl, footerEl };
       renderNativeDialog(t);
       const unsubscribe = subscribeUpdateState(() => renderNativeDialog(t));
+      // Escape 关闭（原生监听，与 React 无关）。
+      const onKeyDown = (event) => {
+        if (event.key === "Escape" && getUpdateState().dialogOpen) {
+          closeUpdateDialog();
+        }
+      };
+      document.addEventListener("keydown", onKeyDown);
       dduDbg("native dialog host: mounted");
       return () => {
         unsubscribe();
+        document.removeEventListener("keydown", onKeyDown);
         if (dduNativeDialog !== null && dduNativeDialog.overlay === overlay) {
           dduNativeDialog = null;
         }
@@ -788,7 +803,7 @@ window.__ModuleLoader__.load({
     /**
      * 侧边栏底部「更新」按钮（sidebar.footer.action）：
      *   - 仅展开态显示（wide），收起侧栏不显示、不影响设置按钮图标；
-     *   - 仅存在新版本时显示；
+     *   - 仅存在新版本时显示；按阶段显示文案（更新 → 下载中 x% → 重启安装）；
      *   - 点击打开更新弹窗。
      * 布局：footer 槽位行高度压为 0，按钮悬浮在设置按钮行右侧空白处
      * （设置按钮保持全宽，右侧本来无内容；匹配失败时退化为独立一行，不影响设置）。
@@ -796,6 +811,14 @@ window.__ModuleLoader__.load({
     function SidebarUpdateAction({ wide, t }) {
       const state = useUpdateState();
       if (!wide || !state.available) return null;
+      let label;
+      if (state.phase === "downloading") {
+        label = t("updates.sidebarDownloading") + " " + Math.round(state.percent) + "%";
+      } else if (state.phase === "downloaded") {
+        label = t("updates.restartInstall");
+      } else {
+        label = t("updates.sidebarUpdate");
+      }
       return (0, react_jsx_runtime.jsx)("button", {
         type: "button",
         className: "dduiU_sideBtn",
@@ -804,7 +827,7 @@ window.__ModuleLoader__.load({
             ? t("updates.updateAvailable")
             : t("updates.updateAvailable") + " " + state.tag,
         onClick: openUpdateDialog,
-        children: t("updates.sidebarUpdate"),
+        children: label,
       });
     }
     //#endregion
@@ -850,6 +873,7 @@ window.__ModuleLoader__.load({
       "updates.download": "前往下载",
       "updates.notNow": "暂不",
       "updates.sidebarUpdate": "更新",
+      "updates.sidebarDownloading": "下载中",
       "updates.installNow": "立即更新",
       "updates.restartInstall": "立即重启安装",
       "updates.downloadedTitle": "更新已就绪",
@@ -882,6 +906,7 @@ window.__ModuleLoader__.load({
       "updates.download": "Go to download",
       "updates.notNow": "Not now",
       "updates.sidebarUpdate": "Update",
+      "updates.sidebarDownloading": "Downloading",
       "updates.installNow": "Update now",
       "updates.restartInstall": "Restart and install",
       "updates.downloadedTitle": "Update ready",
