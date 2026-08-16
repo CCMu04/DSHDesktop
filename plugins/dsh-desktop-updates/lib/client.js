@@ -157,10 +157,12 @@ window.__ModuleLoader__.load({
       setUpdateState({ dialogOpen: true });
     }
     function closeUpdateDialog() {
+      dduDbg("closeUpdateDialog called");
       setUpdateState({ dialogOpen: false });
     }
     /** 立即更新：安装版通知主进程开始下载；便携版直接打开下载页。 */
     function startUpdateDownload() {
+      dduDbg("startUpdateDownload called, kind=" + String(dduInstallKind));
       const state = getUpdateState();
       if (dduInstallKind === "installer") {
         setUpdateState({
@@ -611,6 +613,15 @@ window.__ModuleLoader__.load({
     function UpdateDialogHost({ t }) {
       const state = useUpdateState();
       const [remindOff, setRemindOff] = react.useState(false);
+      // 渲染诊断：每次渲染都记录（弹窗出现但点击无响应时区分渲染/事件问题）。
+      dduDbg(
+        "host render: dialogOpen=" +
+          state.dialogOpen +
+          " phase=" +
+          state.phase +
+          " remindOff=" +
+          remindOff,
+      );
       if (state.dialogOpen === false) return null;
       const latest = state.latest;
       const tag = state.tag ?? (latest ? latest.tag_name : null);
