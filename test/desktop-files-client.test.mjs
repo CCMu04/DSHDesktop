@@ -123,14 +123,22 @@ const fakeWorkbench = {
 // 官方 workspaces 服务：openPath 是唯一文件打开入口（将被包装拦截）。
 const originalOpenPath = (path) => Promise.resolve('host-opened:' + path)
 const workspacesStub = { openPath: originalOpenPath }
+// 记录 sessions.list 订阅回调：模拟 AI 对话期间官方高频通知（投影/任务帧）。
+let listSubscriber = null
+let mockCurrent = 's1'
 const sessionsStub = {
   list: {
     getSnapshot: () => ({
-      current: 's1',
+      current: mockCurrent,
       items: [{ id: 's1' }],
       byId: { s1: { cwd: 'C:\\work\\demo' } },
     }),
-    subscribe: () => () => {},
+    subscribe: (fn) => {
+      listSubscriber = fn
+      return () => {
+        listSubscriber = null
+      }
+    },
   },
 }
 const ctx = {
@@ -212,6 +220,18 @@ if (activatedTabs.length !== 1 || activatedTabs[0] !== 'files') {
 }
 // 相对路径基于会话 cwd 解析（不抛错即可；子页签状态在面板内）。
 await workspacesStub.openPath('docs/readme.md')
+
+// AI 对话期间官方 sessions.list 因投影/任务帧高频通知（快照本身不比较），
+// current/cwd 未变时 store 必须幂等（不重发——否则目录树被反复清空重载，
+// 对话中持续闪烁；回归保护）。
+if (typeof listSubscriber !== 'function') throw new Error('sessions subscriber not registered')
+for (let i = 0; i < 20; i += 1) listSubscriber()
+
+// 会话真正切换时订阅仍正常处理（current 变化 → 不抛错）。
+mockCurrent = 's2'
+listSubscriber()
+mockCurrent = 's1'
+listSubscriber()
 
 // 选择性拦截：目录（无可预览类型）放行官方实现——右键菜单
 // 「在资源管理器中打开」传的是目录，不能被劫持。

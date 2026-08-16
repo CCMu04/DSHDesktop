@@ -261,6 +261,10 @@ window.__ModuleLoader__.load({
       cwd: null,
       listeners: new Set(),
       update(sessionId, cwd) {
+        // 幂等保护：官方 sessions.list 在 AI 对话期间会因投影/任务帧
+        // 频繁通知（快照本身不比较），current/cwd 未变时不得重发——
+        // 否则 FilesPanel 每次都会清空目录树重载（对话中持续闪烁）。
+        if (this.sessionId === sessionId && this.cwd === cwd) return;
         this.sessionId = sessionId;
         this.cwd = cwd;
         for (const listener of Array.from(this.listeners)) {
