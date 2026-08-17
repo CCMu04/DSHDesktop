@@ -10,7 +10,16 @@
  * 同一个 webServer 路由处理 GET/HEAD/POST：webserver 不允许同 path 重复注册，
  * 因此方法分发写在单个 handler 内。
  */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -28,6 +37,10 @@ export const DEFAULT_CONFIG = Object.freeze({
   sessionLogExport: true,
   /** Composer dock stats line widened and centered. */
   statsLine: true,
+  /** Open the current workspace from the session header. */
+  openWorkspace: true,
+  /** Polish the chat reasoning and history-loading presentation. */
+  chatPolish: true,
 });
 
 /** Feature keys in stable order (also the settings-card row order). */
@@ -35,9 +48,8 @@ export const CONFIG_KEYS = Object.freeze(Object.keys(DEFAULT_CONFIG));
 
 /** Resolve the persistence directory ($DSH_HOME or ~/.dsh). */
 function desktopUiHomeDir() {
-  return process.env.DSH_HOME?.trim()
-    ? process.env.DSH_HOME
-    : join(homedir(), ".dsh");
+  const configured = process.env.DSH_HOME?.trim();
+  return configured || join(homedir(), ".dsh");
 }
 
 /** Absolute path of the user-editable overrides document. */
@@ -50,7 +62,10 @@ function readOverrides() {
   let raw;
   try {
     raw = JSON.parse(readFileSync(configPath(), "utf8"));
-  } catch {
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      console.warn("[dsh-desktop-ui] unable to read config; using defaults", error);
+    }
     return {};
   }
   if (typeof raw !== "object" || raw === null) return {};
@@ -65,9 +80,24 @@ function readOverrides() {
 function writeOverrides(section) {
   mkdirSync(desktopUiHomeDir(), { recursive: true });
   const target = configPath();
-  const temporaryPath = `${target}.${process.pid}.tmp`;
-  writeFileSync(temporaryPath, `${JSON.stringify(section, null, 2)}\n`, "utf8");
-  renameSync(temporaryPath, target);
+  const temporaryPath = `${target}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    writeFileSync(temporaryPath, `${JSON.stringify(section, null, 2)}\n`, "utf8");
+    const fd = openSync(temporaryPath, "r+");
+    try {
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    renameSync(temporaryPath, target);
+  } finally {
+    try {
+      unlinkSync(temporaryPath);
+    } catch {
+      // The rename succeeded, or cleanup is not possible; the write error is
+      // reported by the caller while a leftover temp file is harmless.
+    }
+  }
 }
 
 /** Narrow an unknown patch to the boolean fields we own. */
@@ -82,7 +112,10 @@ function narrowPatch(value) {
 
 /** Write one JSON response. */
 function json(res, status, body) {
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "x-content-type-options": "nosniff",
+  });
   res.end(JSON.stringify(body));
 }
 
@@ -94,8 +127,7 @@ function readJsonBody(req) {
     req.on("data", (chunk) => {
       size += chunk.length;
       if (size > 64 * 1024) {
-        reject(new Error("body-too-large"));
-        queueMicrotask(() => req.destroy());
+        reject(Object.assign(new Error("body-too-large"), { code: "body-too-large" }));
         return;
       }
       chunks.push(chunk);
@@ -139,6 +171,7 @@ export function apply(ctx, config = {}) {
           "content-type": "application/json; charset=utf-8",
           "content-length": String(Buffer.byteLength(body)),
           "cache-control": "no-cache",
+          "x-content-type-options": "nosniff",
         });
         if (req.method === "HEAD") {
           res.end();
@@ -148,6 +181,11 @@ export function apply(ctx, config = {}) {
         return;
       }
       if (req.method === "POST") {
+        const contentType = String(req.headers?.["content-type"] ?? "").toLowerCase();
+        if (!contentType.startsWith("application/json")) {
+          json(res, 415, { ok: false, error: "content-type-must-be-application-json" });
+          return;
+        }
         readJsonBody(req).then(
           (body) => {
             const patch = narrowPatch(body);
@@ -155,13 +193,18 @@ export function apply(ctx, config = {}) {
               json(res, 400, { ok: false, error: "no-boolean-fields" });
               return;
             }
-            // Merge over the previous overrides: a partial POST updates only
-            // the fields it carries.
-            writeOverrides({ ...readOverrides(), ...patch });
-            json(res, 200, { ok: true, config: resolve() });
+            try {
+              // Merge over the previous overrides: a partial POST updates only
+              // the fields it carries.
+              writeOverrides({ ...readOverrides(), ...patch });
+              json(res, 200, { ok: true, config: resolve() });
+            } catch {
+              json(res, 500, { ok: false, error: "config-write-failed" });
+            }
           },
           (error) => {
-            json(res, 400, {
+            const tooLarge = error?.code === "body-too-large";
+            json(res, tooLarge ? 413 : 400, {
               ok: false,
               error: error instanceof Error ? error.message : String(error),
             });

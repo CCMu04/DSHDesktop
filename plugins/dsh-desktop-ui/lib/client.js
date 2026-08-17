@@ -12,10 +12,10 @@
  *   openWorkspace    — 「打开工作区」button (open the current workspace in Explorer)
  *   chatPolish       — reasoning-text clamp + centered loading-history hint
  *
- * 注意：host 半区的 DEFAULT_CONFIG / CONFIG_KEYS 目前只有前 3 个键
- * （settingsDrawer / sessionLogExport / statsLine）——openWorkspace 与
- * chatPolish 的开关无法经 host 持久化（narrowPatch 白名单外丢弃），
- * 保存后回退默认（永远生效）。两侧键集同步后方可关闭这两个功能。
+ * host 半区的 DEFAULT_CONFIG / CONFIG_KEYS 已与客户端五个开关同步
+ * （settingsDrawer / sessionLogExport / statsLine / openWorkspace / chatPolish），
+ * 配置由 host 白名单校验并持久化，
+ * 页面重载时按持久化值重新收敛。
  *
  * 功能增强（逻辑类）已拆分为独立插件：dsh-desktop-plugin-list（插件列表）、
  * dsh-desktop-context-menu（右键菜单）、dsh-desktop-updates（检查更新），
@@ -69,7 +69,7 @@ window.__ModuleLoader__.load({
       return out;
     }
     /** Fetch the effective configuration; any failure falls back to all-on. */
-    function loadDesktopUiConfig() {
+    function loadDesktopUiConfig({ fallback = true } = {}) {
       return fetch("/api/desktop-ui/config", {
         headers: { accept: "application/json" },
         cache: "no-store",
@@ -80,7 +80,10 @@ window.__ModuleLoader__.load({
             : Promise.reject(new Error("config-http-" + res.status)),
         )
         .then((body) => dduiNarrowConfig(body))
-        .catch(() => ({ ...dduiDefaultConfig }));
+        .catch((error) => {
+           if (fallback) return { ...dduiDefaultConfig };
+           throw error;
+         });
     }
     /** POST a full config section; resolves to whether the write was accepted. */
     function saveDesktopUiConfig(config) {
@@ -142,8 +145,10 @@ window.__ModuleLoader__.load({
       const panelSelector =
         'div[role="presentation"] > div[role="dialog"][aria-modal="true"][aria-labelledby]';
       let pending = null;
+      let closeTimer = null;
       let bypassing = false;
       const finishClose = () => {
+        closeTimer = null;
         const task = pending;
         pending = null;
         if (task === null) return;
@@ -190,7 +195,7 @@ window.__ModuleLoader__.load({
           key: event.key,
           mode,
         };
-        setTimeout(finishClose, 240);
+        closeTimer = setTimeout(finishClose, 240);
       };
       const onClickCapture = (event) => {
         if (bypassing || pending !== null) return;
@@ -233,11 +238,14 @@ window.__ModuleLoader__.load({
         const panel = document.querySelector(panelSelector);
         if (panel === null) return;
         event.stopImmediatePropagation();
-        playClose(panel, event);
+        playClose(panel, event, "keydown");
       };
       document.addEventListener("click", onClickCapture, true);
       document.addEventListener("keydown", onKeyDownCapture, true);
       return () => {
+        if (closeTimer !== null) clearTimeout(closeTimer);
+        closeTimer = null;
+        pending = null;
         document.removeEventListener("click", onClickCapture, true);
         document.removeEventListener("keydown", onKeyDownCapture, true);
       };
@@ -372,6 +380,12 @@ window.__ModuleLoader__.load({
      */
     function OpenWorkspaceHeaderAction({ workspaces, sessions, t }) {
       const openCurrentWorkspace = () => {
+        if (
+          workspaces?.list?.getSnapshot === void 0 ||
+          sessions?.list?.getSnapshot === void 0 ||
+          typeof workspaces?.openPath !== "function"
+        )
+          return;
         const items = workspaces.list.getSnapshot().items;
         const current = sessions.list.getSnapshot().current;
         const workspace =
@@ -381,7 +395,11 @@ window.__ModuleLoader__.load({
           ) ?? items[0];
         const path = workspace?.path;
         if (typeof path !== "string" || path === "") return;
-        workspaces.openPath(path).catch(() => {});
+        try {
+          Promise.resolve(workspaces.openPath(path)).catch(() => {});
+        } catch {
+          // The host bridge may throw synchronously before returning a Promise.
+        }
       };
       return (0, react_jsx_runtime.jsxs)("button", {
         type: "button",
@@ -485,12 +503,12 @@ window.__ModuleLoader__.load({
     };
     //#endregion
     //#region lib/client/config-card.js
-    // 设置页「视觉增强」配置卡片：3 个开关 + 重置 + 保存（样式对齐官方插件配置卡片）
+    // 设置页「视觉增强」配置卡片：5 个开关 + 重置 + 保存（样式对齐官方插件配置卡片）
     // 卡片样式（常驻注入，卡片本身无开关）。
     const configCardCss =
       ".dduiC_card{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;list-style:none;transition:border-color .16s,background .16s}.dduiC_card:hover{border-color:var(--dsw-alias-label-dimmed)}.dduiC_cardOpen{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-label-dimmed)}.dduiC_header{appearance:none;width:100%;font:inherit;color:inherit;text-align:left;cursor:pointer;background:0 0;border:0;border-radius:12px;align-items:center;gap:12px;padding:14px 16px;display:flex}.dduiC_header:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}.dduiC_headText{flex-direction:column;flex:1;gap:4px;min-width:0;display:flex}.dduiC_name{color:var(--dsw-alias-label-primary);font-size:15px;font-weight:600;line-height:1.4}.dduiC_description{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}.dduiC_chevron{color:var(--dsw-alias-label-tertiary);flex:none;transition:transform .16s}.dduiC_chevronOpen{transform:rotate(180deg)}.dduiC_body{border-top:1px solid var(--dsw-alias-border-l2);margin:0 16px;padding-bottom:8px}.dduiC_field{flex-direction:column;gap:6px;padding:12px 0;display:flex}.dduiC_field+.dduiC_field{border-top:1px solid var(--dsw-alias-border-l2)}.dduiC_head{align-items:center;gap:8px;display:flex}.dduiC_label{min-width:0;color:var(--dsw-alias-label-primary);flex:1;font-size:13px;font-weight:500;line-height:1.5}.dduiC_badges{align-items:center;gap:8px;display:inline-flex}.dduiC_badge{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px}.dduiC_badgeMuted{white-space:nowrap;color:var(--dsw-alias-label-tertiary);border-radius:999px;padding:1px 8px;font-size:11px;line-height:17px}.dduiC_switch{accent-color:var(--dsw-alias-brand-primary);flex:none;width:16px;height:16px;margin:0;cursor:pointer}.dduiC_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}.dduiC_footer{border-top:1px solid var(--dsw-alias-border-l2);justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px;display:flex}.dduiC_failed{min-width:0;color:var(--dsw-alias-label-error);flex:1;margin:0;font-size:12px;line-height:1.5}.dduiC_discard,.dduiC_save{appearance:none;font:inherit;cursor:pointer;border:1px solid #0000;border-radius:8px;padding:5px 14px;font-size:13px;line-height:1.5}.dduiC_discard{border-color:var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);background:0 0}.dduiC_discard:hover:not(:disabled){color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-dimmed)}.dduiC_save{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}.dduiC_discard:disabled,.dduiC_save:disabled{opacity:.4;cursor:default}.dduiC_discard:focus-visible,.dduiC_save:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}";
     const configCardTagId = "dsh-desktop-ui/ConfigCard.module.css";
-    dduiInstallCss(configCardCss, configCardTagId);
+    const configCardCssDisposer = dduiInstallCss(configCardCss, configCardTagId);
     /**
      * 官方 dsh-session-log-export 的导出按钮（英文 "Session log" 胶囊）由本插件
      * 的中文「导出会话」按钮替代，常驻隐藏官方按钮（无论开关状态，避免英文
@@ -500,7 +518,8 @@ window.__ModuleLoader__.load({
     const hideOfficialSessionLogCss =
       '[data-slot="conversation.session.header.utilities"] [class*="sessionLogButton"]{display:none!important}';
     const hideOfficialSessionLogTagId = "dsh-desktop-ui/HideOfficialSessionLog.module.css";
-    dduiInstallCss(hideOfficialSessionLogCss, hideOfficialSessionLogTagId);
+    const installHideOfficialSessionLogCss = () =>
+       dduiInstallCss(hideOfficialSessionLogCss, hideOfficialSessionLogTagId);
     /** Settings card editing the desktop-ui feature switches (reads/writes the host config API). DOM mirrors the official plugin-configuration card: header (name + description + pending badge + chevron), fields (label + status badge + control + hint), footer (failed note + reset + save). */
     function DesktopUiConfigCard({ t }) {
       const [state, setState] = react.useState({
@@ -513,7 +532,7 @@ window.__ModuleLoader__.load({
       const [failed, setFailed] = react.useState(null);
       react.useEffect(() => {
         let current = true;
-        loadDesktopUiConfig().then(
+        loadDesktopUiConfig({ fallback: false }).then(
           (config) => {
             if (current)
               setState({ status: "ready", config, draft: { ...config } });
@@ -710,7 +729,13 @@ window.__ModuleLoader__.load({
      *   3. 启动时先按「全开」安装（避免界面先缺功能再补），配置到达后立即按真实
      *      配置重装收敛（dispose 旧的 → 安装新的）。
      */
-    const inject = ["slots", "locale"];
+    const inject = [
+       "slots",
+       "locale",
+       "sessionLogDownload",
+       "workspaces",
+       "sessions",
+     ];
     function apply(ctx) {
       const t = ctx.locale.bind(NS);
       // --- 总装（always-on）：中英文案词典。
@@ -743,6 +768,7 @@ window.__ModuleLoader__.load({
           );
         }
         if (config.sessionLogExport) {
+          install(() => installHideOfficialSessionLogCss());
           install(() => installHeaderActionCss());
           install(() => installUtilitiesCss());
           const controller = ctx.get("sessionLogDownload");
@@ -817,7 +843,18 @@ window.__ModuleLoader__.load({
       // applyConfig 每次先 dispose 上一轮安装（active），再装新的 —— 开关变化后
       // 保存会触发整页刷新，这里覆盖的是「启动瞬间」的收敛场景。
       let active = [];
-      const applyConfig = (config) => {
+      let disposed = false;
+       ctx.effect(
+         () => () => {
+           disposed = true;
+           for (const dispose of active) dispose();
+           active = [];
+           configCardCssDisposer();
+         },
+         "dsh-desktop-ui: browser lifecycle",
+       );
+       const applyConfig = (config) => {
+         if (disposed) return;
         for (const dispose of active) dispose();
         active = installFeatures(config);
       };

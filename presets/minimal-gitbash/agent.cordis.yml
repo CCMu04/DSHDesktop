@@ -1,0 +1,70 @@
+# DSHDesktop 内置的「极简模式 (Git Bash)」agent preset。
+#
+# 与官方极简模式（minimal）相比只有两点不同，其余完全一致：
+#   1. bash 执行链路：官方持久 PTY 会话在 win32 上无法启动（subprocess-local
+#      拒绝 terminal inspection），改为每次调用 `git bash -c <command>` 的
+#      全新 shell（见 ./gitbash-executor.mjs）；
+#   2. 文件系统后端：官方极简模式挂裸 `dsh-fs-local`，它不上报 sandboxMode，
+#      导致 str_replace_editor 拿不到写入策略（Read Only 徽章下仍可改机器上
+#      任意绝对路径文件，deepseek-harness discussion #2066）。这里换成
+#      `dsh-fs-sandbox`：上报 sandboxMode、按会话策略围栏所有写入
+#      （read-only 拒绝写入，workspace-write 仅放行工作区与临时目录）。
+#
+# persona 仍是完整系统提示词，因此全局身份、Web 引导、工具说明与后续装配
+# 监听器都无法追加提示词文本；运行时上下文快照被抑制；模型只编配 bash 与
+# str_replace_editor 两个工具；无上下文压缩。沙箱：MSYS 运行时在 Windows
+# 受限令牌下无法启动，bash 仅在 danger-full-access 策略下放行（若要
+# workspace-write 使用，需要把会话权限徽章切到「完全访问」）。
+
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: You are a helpful software engineer assistant.
+    complete: true
+    includeRuntimeContext: false
+
+# shell 提供者是 agent 自有的服务，因此放在 entry-local realm（与官方预设的
+# PTY 注册表同一思路）。执行器消费宿主 subprocess 服务，工具注册进本 agent
+# 的作用域目录。本地模块不带任何包导入，因为预设内文件相对预设目录解析，
+# 不落在 DSH 的 node_modules 树上。
+- id: gitbash-shell
+  name: cordis:group
+  group: true
+  disabled: !!js process.platform !== 'win32'
+  isolate:
+    shell: true
+  config:
+    - id: gitbash-executor
+      name: ./gitbash-executor.mjs
+      config:
+        # shellPath 留空：桌面端通过 GIT_BASH 环境变量注入（探测链第一优先级），
+        # 也可显式写 shellPath: 'C:\\Program Files\\Git\\bin\\bash.exe'
+        timeoutMs: 120000
+        maxTimeoutMs: 600000
+        maxOutputBytes: 64000
+        maxSpillBytes: 67108864
+        graceMs: 3000
+
+    - id: tool-bash
+      name: '@deepseek-ai/dsh-tool-bash'
+      config:
+        enableRunInBackground: false
+
+# 本地文件系统仅对本预设遮蔽宿主的上报 sandboxMode 的提供者；编辑器与后端
+# 共享该 realm，并要求绝对路径。与官方极简模式不同，这里用带写围栏的
+# dsh-fs-sandbox，使权限徽章（read-only / workspace-write）真正约束编辑器的写入。
+- id: filesystem
+  name: cordis:group
+  group: true
+  isolate:
+    fs: true
+  config:
+    - id: fs-sandbox
+      name: '@deepseek-ai/dsh-fs-sandbox'
+      config:
+        cwd: !!js process.env.DSH_CWD ?? process.cwd()
+
+    - id: str-replace-editor
+      name: '@deepseek-ai/dsh-tool-str-replace-editor'
+      config:
+        maxOutputChars: 16000

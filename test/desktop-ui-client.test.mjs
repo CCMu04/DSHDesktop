@@ -141,6 +141,8 @@ const ctx = {
 
 // --- load the bundle -------------------------------------------------------
 const source = readFileSync(new URL('../plugins/dsh-desktop-ui/lib/client.js', import.meta.url), 'utf8')
+if (!source.includes('playClose(panel, event, "keydown")')) throw new Error('Escape close must replay a KeyboardEvent path')
+if (!source.includes('install(() => installHideOfficialSessionLogCss())')) throw new Error('official export hiding CSS must follow the export switch')
 ;(0, eval)(source)
 if (loaded.length !== 1) throw new Error(`bundle should register exactly one loader entry, got ${loaded.length}`)
 const entry = loaded[0]
@@ -197,11 +199,11 @@ const ids2 = registered.map((r) => r.entry.options?.id).sort()
 if (JSON.stringify(ids2) !== JSON.stringify(['dsh-desktop-ui-config'])) {
   throw new Error(`all-off entries wrong: ${ids2.join(', ')}`)
 }
-// Everything off: only the always-on card + official-button hiding styles remain.
+// Everything off: only the always-on configuration-card style remains;
+// the official export button must be restored when our replacement is off.
 const offStyles = headStyles.map((s) => s.dataset.pluginCss).sort()
 if (JSON.stringify(offStyles) !== JSON.stringify([
   'dsh-desktop-ui/ConfigCard.module.css',
-  'dsh-desktop-ui/HideOfficialSessionLog.module.css',
 ])) {
   throw new Error(`all-off styles wrong: ${offStyles.join(', ')}`)
 }

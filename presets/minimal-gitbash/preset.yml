@@ -1,0 +1,3 @@
+name: 极简模式 (Git Bash)
+description: Windows 极简模式变体：bash 命令通过 Git for Windows 执行（每次调用独立 shell，需要完全访问沙箱），文件编辑带沙箱写围栏。
+order: 4

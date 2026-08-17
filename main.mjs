@@ -16,9 +16,26 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog, Menu, nativeImage, nativeTheme, net as electronNet, Notification, screen, shell, Tray } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  Menu,
+  nativeImage,
+  nativeTheme,
+  net as electronNet,
+  Notification,
+  screen,
+  shell,
+  Tray,
+} from 'electron'
 import electronUpdater from 'electron-updater'
 import { ensureBundledPlugin } from './builtin-plugin.mjs'
+import {
+  ensureGitBash,
+  ensureMinimalGitBashPreset,
+  MINIMAL_GITBASH_PRESET_NAME,
+} from './git-bash.mjs'
 import { prepareDesktopToolchain } from './toolchain.mjs'
 import {
   buildCloseDialogOptions,
@@ -34,8 +51,15 @@ import {
   isUpdateAvailable,
   LATEST_RELEASE_URL,
 } from './update-check.mjs'
-import { clearAutoCheck, recordAutoCheck, shouldAutoCheck } from './update-throttle.mjs'
-import { readDismissedVersion, recordDismissedVersion } from './update-prompt.mjs'
+import {
+  clearAutoCheck,
+  recordAutoCheck,
+  shouldAutoCheck,
+} from './update-throttle.mjs'
+import {
+  readDismissedVersion,
+  recordDismissedVersion,
+} from './update-prompt.mjs'
 import {
   parseWindowState,
   sanitizeWindowState,
@@ -127,18 +151,27 @@ function expandHomePath(value) {
 
 function resolveSharedDshHome() {
   const configuredHome = process.env.DSH_HOME
-  const selectedHome = configuredHome?.trim() ? configuredHome : path.join(os.homedir(), '.dsh')
+  const selectedHome = configuredHome?.trim()
+    ? configuredHome
+    : path.join(os.homedir(), '.dsh')
   return path.resolve(expandHomePath(selectedHome))
 }
 
-function mergeMissingFiles(sourceDirectory, targetDirectory, relativeDirectory = '') {
+function mergeMissingFiles(
+  sourceDirectory,
+  targetDirectory,
+  relativeDirectory = '',
+) {
   let copied = 0
   let skipped = 0
   mkdirSync(targetDirectory, { recursive: true })
 
   for (const entry of readdirSync(sourceDirectory, { withFileTypes: true })) {
     const relativePath = path.join(relativeDirectory, entry.name)
-    if (relativePath === path.join('profiles', 'node_modules') || entry.isSymbolicLink()) {
+    if (
+      relativePath === path.join('profiles', 'node_modules') ||
+      entry.isSymbolicLink()
+    ) {
       skipped += 1
       continue
     }
@@ -170,7 +203,10 @@ function mergeMissingFiles(sourceDirectory, targetDirectory, relativeDirectory =
 
 function migrateLegacyDshHome(sharedDshHome) {
   const legacyDshHome = path.join(app.getPath('userData'), 'dsh-home')
-  const markerPath = path.join(app.getPath('userData'), 'shared-dsh-home-migration-v1.json')
+  const markerPath = path.join(
+    app.getPath('userData'),
+    'shared-dsh-home-migration-v1.json',
+  )
   if (existsSync(markerPath) || !existsSync(legacyDshHome)) return
   if (path.resolve(legacyDshHome) === sharedDshHome) return
 
@@ -183,7 +219,10 @@ function migrateLegacyDshHome(sharedDshHome) {
 }
 
 function getRuntimeDirectory() {
-  return runtimeDirectory ?? path.join(shellDirectory, 'node_modules', '@deepseek-ai', 'dsh')
+  return (
+    runtimeDirectory ??
+    path.join(shellDirectory, 'node_modules', '@deepseek-ai', 'dsh')
+  )
 }
 
 function runProcess(command, args, options = {}) {
@@ -192,9 +231,12 @@ function runProcess(command, args, options = {}) {
     child.stdout.on('data', appendBackendOutput)
     child.stderr.on('data', appendBackendOutput)
     child.once('error', reject)
-    child.once('exit', code => {
+    child.once('exit', (code) => {
       if (code === 0) resolve()
-      else reject(new Error(`Desktop preparation command exited with code ${code}.`))
+      else
+        reject(
+          new Error(`Desktop preparation command exited with code ${code}.`),
+        )
     })
   })
 }
@@ -204,7 +246,9 @@ async function preparePackagedRuntime() {
 
   const resourceDirectory = path.join(process.resourcesPath, 'runtime')
   const archivePath = path.join(resourceDirectory, 'dsh-runtime.7z')
-  const metadata = JSON.parse(readFileSync(path.join(resourceDirectory, 'runtime.json'), 'utf8'))
+  const metadata = JSON.parse(
+    readFileSync(path.join(resourceDirectory, 'runtime.json'), 'utf8'),
+  )
   const cacheRoot = path.join(app.getPath('userData'), 'runtime-cache')
   const finalDirectory = path.join(cacheRoot, 'current')
   const markerPath = path.join(finalDirectory, 'runtime.json')
@@ -213,24 +257,33 @@ async function preparePackagedRuntime() {
   if (existsSync(markerPath)) {
     previousMetadata = JSON.parse(readFileSync(markerPath, 'utf8'))
     if (previousMetadata.archiveSha256 === metadata.archiveSha256) {
-      runtimeDirectory = path.join(finalDirectory, 'node_modules', '@deepseek-ai', 'dsh')
+      runtimeDirectory = path.join(
+        finalDirectory,
+        'node_modules',
+        '@deepseek-ai',
+        'dsh',
+      )
       await setLoadingStatus('正在启动本地服务…')
       return
     }
   }
 
   mkdirSync(cacheRoot, { recursive: true })
-  const temporaryDirectory = path.join(cacheRoot, `${metadata.dshVersion}.extracting-${process.pid}`)
+  const temporaryDirectory = path.join(
+    cacheRoot,
+    `${metadata.dshVersion}.extracting-${process.pid}`,
+  )
   rmSync(temporaryDirectory, { recursive: true, force: true })
   mkdirSync(temporaryDirectory, { recursive: true })
 
   const previousPackages = previousMetadata?.packages ?? {}
   const nextPackages = metadata.packages ?? {}
   const changedPackages = Object.keys(nextPackages).filter(
-    packagePath => previousPackages[packagePath] !== nextPackages[packagePath],
+    (packagePath) =>
+      previousPackages[packagePath] !== nextPackages[packagePath],
   )
   const removedPackages = Object.keys(previousPackages).filter(
-    packagePath => !(packagePath in nextPackages),
+    (packagePath) => !(packagePath in nextPackages),
   )
 
   await setLoadingStatus(
@@ -249,7 +302,7 @@ async function preparePackagedRuntime() {
     const extractionListPath = path.join(temporaryDirectory, 'extract-list.txt')
     writeFileSync(
       extractionListPath,
-      `${changedPackages.map(packagePath => `${packagePath.replaceAll('/', '\\')}\\*`).join('\r\n')}\r\n`,
+      `${changedPackages.map((packagePath) => `${packagePath.replaceAll('/', '\\')}\\*`).join('\r\n')}\r\n`,
       'utf8',
     )
 
@@ -266,7 +319,10 @@ async function preparePackagedRuntime() {
 
   mkdirSync(finalDirectory, { recursive: true })
   for (const packagePath of removedPackages) {
-    rmSync(path.join(finalDirectory, packagePath), { recursive: true, force: true })
+    rmSync(path.join(finalDirectory, packagePath), {
+      recursive: true,
+      force: true,
+    })
   }
   for (const packagePath of changedPackages) {
     const source = path.join(temporaryDirectory, packagePath)
@@ -277,7 +333,12 @@ async function preparePackagedRuntime() {
   }
   writeFileSync(markerPath, JSON.stringify(metadata), 'utf8')
   rmSync(temporaryDirectory, { recursive: true, force: true })
-  runtimeDirectory = path.join(finalDirectory, 'node_modules', '@deepseek-ai', 'dsh')
+  runtimeDirectory = path.join(
+    finalDirectory,
+    'node_modules',
+    '@deepseek-ai',
+    'dsh',
+  )
   await setLoadingStatus('正在启动本地服务…')
 }
 
@@ -297,8 +358,9 @@ function reservePort() {
     server.once('error', reject)
     server.listen(0, backendHost, () => {
       const address = server.address()
-      const port = typeof address === 'object' && address ? address.port : undefined
-      server.close(error => {
+      const port =
+        typeof address === 'object' && address ? address.port : undefined
+      server.close((error) => {
         if (error) reject(error)
         else if (port) resolve(port)
         else reject(new Error('Unable to reserve a local port.'))
@@ -308,8 +370,8 @@ function reservePort() {
 }
 
 function probe(url) {
-  return new Promise(resolve => {
-    const request = http.get(url, response => {
+  return new Promise((resolve) => {
+    const request = http.get(url, (response) => {
       response.resume()
       resolve(response.statusCode === 200)
     })
@@ -322,12 +384,16 @@ async function waitForBackend(url) {
   const deadline = Date.now() + startupTimeoutMs
   while (Date.now() < deadline) {
     if (backendExitCode !== null) {
-      throw new Error(`The local Web service exited with code ${backendExitCode}.`)
+      throw new Error(
+        `The local Web service exited with code ${backendExitCode}.`,
+      )
     }
     if (await probe(url)) return
-    await new Promise(resolve => setTimeout(resolve, 250))
+    await new Promise((resolve) => setTimeout(resolve, 250))
   }
-  throw new Error('The local Web service did not become ready within 60 seconds.')
+  throw new Error(
+    'The local Web service did not become ready within 60 seconds.',
+  )
 }
 
 function prepareBackendContext() {
@@ -373,16 +439,23 @@ async function prepareBundledPlugins(context) {
       userDataDirectory: app.getPath('userData'),
       dshHome: context.dshHome,
       packageName,
-      install: targetDirectory => runProcess(
-        nodeExecutablePath,
-        [
-          '--require', runtimePreloadPath,
-          '--expose-internals', context.dshEntry,
-          'plugin', '--profile', 'web',
-          'add', '--offline', `link:${targetDirectory.replaceAll('\\', '/')}`,
-        ],
-        { cwd: os.homedir(), env: context.environment },
-      ),
+      install: (targetDirectory) =>
+        runProcess(
+          nodeExecutablePath,
+          [
+            '--require',
+            runtimePreloadPath,
+            '--expose-internals',
+            context.dshEntry,
+            'plugin',
+            '--profile',
+            'web',
+            'add',
+            '--offline',
+            `link:${targetDirectory.replaceAll('\\', '/')}`,
+          ],
+          { cwd: os.homedir(), env: context.environment },
+        ),
     })
   }
 }
@@ -396,8 +469,13 @@ function startBackend(port, context) {
   backendProcess = spawn(
     nodeExecutablePath,
     [
-      '--require', runtimePreloadPath,
-      '--expose-internals', context.dshEntry, 'web', '--port', String(port),
+      '--require',
+      runtimePreloadPath,
+      '--expose-internals',
+      context.dshEntry,
+      'web',
+      '--port',
+      String(port),
     ],
     {
       cwd: os.homedir(),
@@ -406,17 +484,17 @@ function startBackend(port, context) {
     },
   )
 
-  const appendOutput = data => {
+  const appendOutput = (data) => {
     appendBackendOutput(data)
     logStream.write(data)
   }
   backendProcess.stdout.on('data', appendOutput)
   backendProcess.stderr.on('data', appendOutput)
-  backendProcess.once('error', error => {
+  backendProcess.once('error', (error) => {
     appendBackendOutput(`Backend spawn failed: ${String(error)}\n`)
     backendExitCode = 'spawn-failed'
   })
-  backendProcess.once('exit', code => {
+  backendProcess.once('exit', (code) => {
     backendExitCode = code
     logStream.end()
   })
@@ -436,7 +514,10 @@ function syncTitleBarOverlay(window, symbolColor) {
 }
 
 function syncTitleBarOverlayFromNativeTheme(window) {
-  syncTitleBarOverlay(window, nativeTheme.shouldUseDarkColors ? titleBarSymbolDark : titleBarSymbolLight)
+  syncTitleBarOverlay(
+    window,
+    nativeTheme.shouldUseDarkColors ? titleBarSymbolDark : titleBarSymbolLight,
+  )
 }
 
 // --- Close behavior: minimize to tray vs. full quit -----------------------
@@ -463,7 +544,7 @@ function loadWindowState() {
     const parsed = parseWindowState(readFileSync(getWindowStatePath(), 'utf8'))
     return sanitizeWindowState(
       parsed,
-      screen.getAllDisplays().map(display => display.workArea),
+      screen.getAllDisplays().map((display) => display.workArea),
     )
   } catch {
     return parseWindowState(undefined)
@@ -512,7 +593,9 @@ function minimizeToTray() {
 
 function ensureTray() {
   if (tray) return
-  tray = new Tray(nativeImage.createFromPath(path.join(shellDirectory, 'assets', 'icon.png')))
+  tray = new Tray(
+    nativeImage.createFromPath(path.join(shellDirectory, 'assets', 'icon.png')),
+  )
   tray.setToolTip('DeepSeek Harness')
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -552,33 +635,45 @@ function sendTrayCommand(command) {
 // (the window is brought up first so the dialog is visible).
 async function checkForUpdates() {
   showMainWindow()
-  const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined
+  const parent =
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined
   const currentVersion = app.getVersion()
   try {
     const response = await electronNet.fetch(LATEST_RELEASE_URL, {
-      headers: { accept: 'application/vnd.github+json', 'user-agent': 'deepseek-harness-desktop' },
+      headers: {
+        accept: 'application/vnd.github+json',
+        'user-agent': 'deepseek-harness-desktop',
+      },
       signal: AbortSignal.timeout(15_000),
     })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const release = await response.json()
-    const latestVersion = typeof release?.tag_name === 'string' ? release.tag_name : ''
+    const latestVersion =
+      typeof release?.tag_name === 'string' ? release.tag_name : ''
     if (latestVersion && isUpdateAvailable(currentVersion, latestVersion)) {
-      const { response: choice } = await dialog.showMessageBox(parent, buildUpdateFoundOptions(currentVersion, release))
-      if (choice === 0 && typeof release?.html_url === 'string') void shell.openExternal(release.html_url)
+      const { response: choice } = await dialog.showMessageBox(
+        parent,
+        buildUpdateFoundOptions(currentVersion, release),
+      )
+      if (choice === 0 && typeof release?.html_url === 'string')
+        void shell.openExternal(release.html_url)
     } else {
       await dialog.showMessageBox(parent, buildUpToDateOptions(currentVersion))
     }
   } catch (error) {
     await dialog.showMessageBox(
       parent,
-      buildUpdateFailedOptions(error instanceof Error ? error.message : String(error)),
+      buildUpdateFailedOptions(
+        error instanceof Error ? error.message : String(error),
+      ),
     )
   }
 }
 
 function applyCloseBehavior(behavior, remembered) {
   if (remembered) saveCloseBehavior({ behavior, remembered: true })
-  else if (loadCloseBehavior().remembered) saveCloseBehavior({ behavior, remembered: false })
+  else if (loadCloseBehavior().remembered)
+    saveCloseBehavior({ behavior, remembered: false })
   if (behavior === 'minimize') {
     minimizeToTray()
     // The notification shows only when the user checks 「记住我的选择」 with
@@ -592,9 +687,13 @@ function applyCloseBehavior(behavior, remembered) {
 }
 
 async function askCloseBehavior() {
-  const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined
+  const parent =
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined
   const remembered = loadCloseBehavior().remembered
-  const { response, checkboxChecked } = await dialog.showMessageBox(parent, buildCloseDialogOptions(remembered))
+  const { response, checkboxChecked } = await dialog.showMessageBox(
+    parent,
+    buildCloseDialogOptions(remembered),
+  )
   applyCloseBehavior(response === 0 ? 'minimize' : 'quit', checkboxChecked)
 }
 
@@ -713,7 +812,7 @@ function configureNavigation(window) {
   // The completion-reminder plugin raises the desktop wake marker when a
   // system notification is clicked: restore/focus the window (window.focus()
   // in the renderer cannot unminimize), so the click always lands on the chat.
-  window.webContents.on('console-message', details => {
+  window.webContents.on('console-message', (details) => {
     const message = details?.message
     if (typeof message !== 'string') return
     if (message.startsWith(desktopWakeMarker)) {
@@ -798,7 +897,7 @@ async function createWindow() {
   // changes the Web address on next launch. Unless the user chose to fully
   // quit (and remembered it), the window minimizes to the tray instead; the
   // tray menu's 退出 is the only way to fully quit while minimized.
-  mainWindow.on('close', event => {
+  mainWindow.on('close', (event) => {
     if (quitting) return
     const config = loadCloseBehavior()
     if (config.remembered && config.behavior === 'minimize') {
@@ -821,7 +920,14 @@ async function createWindow() {
       saveWindowState()
     }, 300)
   }
-  for (const eventName of ['resize', 'move', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
+  for (const eventName of [
+    'resize',
+    'move',
+    'maximize',
+    'unmaximize',
+    'enter-full-screen',
+    'leave-full-screen',
+  ]) {
     mainWindow.on(eventName, scheduleWindowStateSave)
   }
   mainWindow.once('ready-to-show', () => {
@@ -838,6 +944,42 @@ async function launch() {
   const context = prepareBackendContext()
   await setLoadingStatus('正在准备内置桌面插件…')
   await prepareBundledPlugins(context)
+  // 按需提供 Git Bash：极简模式 (Git Bash) 预设需要 bash，而 Windows 默认
+  // 没有。已装 Git 则静默复用；缺失时向用户说明用途并经其同意后下载
+  // PortableGit 解压到应用数据目录，再通过 GIT_BASH/PATH 注入给后端。
+  // 全程不抛错：失败只弹提示，不影响本次启动。
+  await setLoadingStatus('正在检查 Git Bash…')
+  await ensureGitBash({
+    userDataDirectory: app.getPath('userData'),
+    resourcesPath: process.resourcesPath,
+    shellDirectory,
+    environment: context.environment,
+    fetch: (...args) => electronNet.fetch(...args),
+    showMessageBox: (options) =>
+      mainWindow && !mainWindow.isDestroyed()
+        ? dialog.showMessageBox(mainWindow, options)
+        : dialog.showMessageBox(options),
+    notify: (options) => new Notification(options).show(),
+    loadingStatus: setLoadingStatus,
+  })
+  // 部署内置的「极简模式 (Git Bash)」agent preset：DSH 的预设发现机制是
+  // 扫描 ${DSH_HOME}/.agent-presets/，必须在后端启动前把打包的预设目录
+  // 幂等复制过去（已存在则不覆盖）。失败只记录日志，不影响启动。
+  const presetDeployment = ensureMinimalGitBashPreset({
+    dshHome: context.dshHome,
+    presetsDirectory: app.isPackaged
+      ? path.join(process.resourcesPath, 'presets')
+      : path.join(shellDirectory, 'presets'),
+  })
+  if (presetDeployment.status === 'installed') {
+    appendBackendOutput(
+      `Desktop: installed ${MINIMAL_GITBASH_PRESET_NAME} agent preset.\n`,
+    )
+  } else if (presetDeployment.status === 'failed') {
+    appendBackendOutput(
+      `Desktop: failed to install ${MINIMAL_GITBASH_PRESET_NAME} agent preset: ${presetDeployment.error}\n`,
+    )
+  }
   await setLoadingStatus('正在启动本地服务…')
   const port = await reservePort()
   backendOrigin = `http://${backendHost}:${port}`
@@ -948,7 +1090,9 @@ app.whenReady().then(async () => {
       type: 'error',
       title: 'DeepSeek Harness failed to start',
       message: error instanceof Error ? error.message : String(error),
-      detail: details || 'See backend.log in the application log directory for details.',
+      detail:
+        details ||
+        'See backend.log in the application log directory for details.',
     })
     quitting = true
     stopBackend()

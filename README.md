@@ -18,6 +18,7 @@ DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中�
 - **内置 desktop-ui 增强**：设置抽屉样式、右键菜单（在资源管理器中打开工作区、复制粘贴）、会话日志导出等。
 - **对话页内工作台**：文件 / Git 功能面板与对话并存显示（页签行 [|] 按钮开关、拖拽调宽、按会话记忆布局）；回复完成或 AI 调起询问时右下角系统通知，点击直达对应聊天窗口。
 - **本地优先**：Web 服务仅监听随机本机回环端口。
+- **Git Bash 按需内置**：内置「极简模式 (Git Bash)」agent preset，检测到缺少 bash 时先向用户说明用途，经同意后自动下载 Git for Windows 便携版到应用数据目录，开箱即用（详见下）。
 
 ## 下载与安装
 
@@ -48,6 +49,25 @@ DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中�
 - `dsh-desktop-context-menu` — **功能增强：右键菜单**
 - `dsh-desktop-notify` — **功能增强：完成提醒**
 - `dsh-desktop-tray` — **托盘命令桥**（新建任务 / 添加工作区 / 检查更新）
+
+### Git Bash 按需内置（极简模式 (Git Bash)）
+
+DSH 的极简模式预设依赖 `bash`，但 Windows 默认没有。桌面端内置了自研的「极简模式 (Git Bash)」agent preset（`presets/minimal-gitbash/`，灵感来自社区 [dsh-gitbash-preset](https://github.com/liceses/dsh-gitbash-preset) 与 [dsh-win32](https://github.com/sjh9714/dsh-win32)，见 [第三方声明](THIRD_PARTY_NOTICES.md)），并负责两件事：
+
+**1. 部署预设本体**：DSH 的预设发现机制是启动时扫描 `${DSH_HOME}/.agent-presets/`，桌面端在后端启动前把打包的预设幂等复制到该目录（已存在则不覆盖用户改过的版本），因此新建会话时就能直接选择「极简模式 (Git Bash)」，无需安装任何插件。
+
+**2. 按需提供 bash**：启动时按以下顺序解析 bash（与预设执行器的探测顺序一致，结果通过 `GIT_BASH` 环境变量注入后端）：
+
+1. 应用数据目录中已安装的便携版 `runtime-tools\git-bash\bin\bash.exe`；
+2. 系统已装的 Git for Windows（`GIT_BASH` → Program Files → `%LOCALAPPDATA%\Programs\Git` → PATH，跳过 System32 下的 WSL 启动器 stub）；
+3. 都没有时，弹窗说明下载用途并询问用户，同意后从 Git for Windows 官方 GitHub Release 下载最新 PortableGit（约 350–400 MB），用自带 7-Zip 解压到应用数据目录——不修改系统、不需要管理员权限。
+
+与社区版的两处改进：
+
+- **带写围栏的文件系统**：官方极简模式挂裸 `fs-local`，不上报 `sandboxMode`，导致 str_replace_editor 在 Read Only 徽章下也没有写入围栏（[deepseek-harness discussion #2066](https://github.com/deepseek-ai/deepseek-harness/discussions/2066)）。内置预设改用 `dsh-fs-sandbox`：权限徽章（read-only / workspace-write）真正约束编辑器写入；
+- **中文错误与桌面端指引**：bash 调用被沙箱拒绝时给出明确中文提示（如何切「完全访问」或发起单次升级）。
+
+下载决策记录在 `runtime-tools\git-bash-state.json`：「不再询问」后 7 天内不弹窗，下载失败 1 天内自动重试。也可以不下载，自行安装 Git for Windows（git-scm.com）后重启应用即可识别。注意：会话沙箱为 workspace-write（或更窄）时，MSYS 运行时仍无法启动（DSH 沙箱边界），需切换完全访问或由模型按提示单次升级；bash 每次调用为全新 shell，不保留 cd/export 状态。
 
 ### 视觉增强开关（dsh-desktop-ui）
 

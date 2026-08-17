@@ -55,10 +55,14 @@ const postJson = async (path, body) => {
   })
   return { status: res.status, body: await res.json() }
 }
+const postRaw = async (path, body, headers = {}) => {
+  const res = await fetch(base + path, { method: 'POST', headers, body })
+  return { status: res.status, body: await res.json() }
+}
 
 // GET defaults: everything on
 let r = await getJson('/api/desktop-ui/config')
-if (r.status !== 200 || r.body.settingsDrawer !== true || r.body.sessionLogExport !== true || r.body.statsLine !== true) {
+if (r.status !== 200 || r.body.settingsDrawer !== true || r.body.sessionLogExport !== true || r.body.statsLine !== true || r.body.openWorkspace !== true || r.body.chatPolish !== true) {
   throw new Error(`GET defaults wrong: ${JSON.stringify(r)}`)
 }
 
@@ -69,6 +73,12 @@ if (r.status !== 200 || r.body.config.settingsDrawer !== false) throw new Error(
 // persisted file contains the patch
 const file = JSON.parse(readFileSync(join(home, 'desktop-ui.json'), 'utf8'))
 if (file.settingsDrawer !== false || file.sessionLogExport !== undefined) throw new Error(`file wrong: ${JSON.stringify(file)}`)
+
+// The two later feature switches must also survive the host whitelist.
+r = await postJson('/api/desktop-ui/config', { openWorkspace: false, chatPolish: false })
+if (r.status !== 200 || r.body.config.openWorkspace !== false || r.body.config.chatPolish !== false) throw new Error(`new switches failed: ${JSON.stringify(r)}`)
+const fileWithFiveKeys = JSON.parse(readFileSync(join(home, 'desktop-ui.json'), 'utf8'))
+if (fileWithFiveKeys.openWorkspace !== false || fileWithFiveKeys.chatPolish !== false) throw new Error(`five-key file wrong: ${JSON.stringify(fileWithFiveKeys)}`)
 
 // GET now reflects the override
 r = await getJson('/api/desktop-ui/config')
@@ -85,6 +95,11 @@ if (r.status !== 400) throw new Error(`empty patch should 400, got ${r.status}`)
 // GET with HEAD
 const head = await fetch(base + '/api/desktop-ui/config', { method: 'HEAD' })
 if (head.status !== 200) throw new Error(`HEAD failed: ${head.status}`)
+
+const wrongType = await postRaw('/api/desktop-ui/config', JSON.stringify({ statsLine: false }), { 'content-type': 'text/plain' })
+if (wrongType.status !== 415) throw new Error(`wrong content type should 415, got ${wrongType.status}`)
+const oversized = await postRaw('/api/desktop-ui/config', 'x'.repeat(64 * 1024 + 1), { 'content-type': 'application/json' })
+if (oversized.status !== 413) throw new Error(`oversized body should 413, got ${oversized.status}`)
 
 // plugin row config is a layer below the user file
 routes.length = 0
