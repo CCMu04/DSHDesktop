@@ -6,7 +6,7 @@ import {
   MINIMIZE_TO_TRAY_NOTIFICATION,
   parseCloseBehavior,
   serializeCloseBehavior,
-} from '../close-behavior.mjs'
+} from '../lib/close-behavior.mjs'
 
 test('defaultCloseBehavior is not remembered', () => {
   assert.deepEqual(defaultCloseBehavior(), { remembered: false })

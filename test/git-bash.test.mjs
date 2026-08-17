@@ -28,7 +28,7 @@ import {
   REASK_SKIPPED_MS,
   shouldPromptGitBash,
   writeGitBashState,
-} from '../git-bash.mjs'
+} from '../lib/git-bash.mjs'
 
 test('isWslBashDirectory recognizes the WSL launcher stub directories', () => {
   for (const dir of [

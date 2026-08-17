@@ -3,7 +3,7 @@ import test, { after } from 'node:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readDismissedVersion, recordDismissedVersion } from '../update-prompt.mjs'
+import { readDismissedVersion, recordDismissedVersion } from '../lib/update-prompt.mjs'
 
 const home = mkdtempSync(join(tmpdir(), 'dsh-update-prompt-test-'))
 process.env.DSH_HOME = home

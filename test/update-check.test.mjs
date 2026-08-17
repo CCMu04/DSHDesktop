@@ -8,7 +8,7 @@ import {
   formatReleaseNotes,
   isUpdateAvailable,
   parseVersionParts,
-} from '../update-check.mjs'
+} from '../lib/update-check.mjs'
 
 test('parseVersionParts strips the v prefix and keeps numeric parts numeric', () => {
   assert.deepEqual(parseVersionParts('v0.1.0-rc.6.6.1'), [0, 1, 0, 'rc', 6, 6, 1])

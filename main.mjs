@@ -30,42 +30,42 @@ import {
   Tray,
 } from 'electron'
 import electronUpdater from 'electron-updater'
-import { ensureBundledPlugin } from './builtin-plugin.mjs'
+import { ensureBundledPlugin } from './lib/builtin-plugin.mjs'
 import {
   ensureGitBash,
   ensureMinimalGitBashPreset,
   MINIMAL_GITBASH_PRESET_NAME,
-} from './git-bash.mjs'
-import { prepareDesktopToolchain } from './toolchain.mjs'
+} from './lib/git-bash.mjs'
+import { prepareDesktopToolchain } from './lib/toolchain.mjs'
 import {
   buildCloseDialogOptions,
   CLOSE_BEHAVIOR_FILE,
   MINIMIZE_TO_TRAY_NOTIFICATION,
   parseCloseBehavior,
   serializeCloseBehavior,
-} from './close-behavior.mjs'
+} from './lib/close-behavior.mjs'
 import {
   buildUpdateFailedOptions,
   buildUpdateFoundOptions,
   buildUpToDateOptions,
   isUpdateAvailable,
   LATEST_RELEASE_URL,
-} from './update-check.mjs'
+} from './lib/update-check.mjs'
 import {
   clearAutoCheck,
   recordAutoCheck,
   shouldAutoCheck,
-} from './update-throttle.mjs'
+} from './lib/update-throttle.mjs'
 import {
   readDismissedVersion,
   recordDismissedVersion,
-} from './update-prompt.mjs'
+} from './lib/update-prompt.mjs'
 import {
   parseWindowState,
   sanitizeWindowState,
   serializeWindowState,
   WINDOW_STATE_FILE,
-} from './window-state.mjs'
+} from './lib/window-state.mjs'
 
 const { autoUpdater } = electronUpdater
 

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { prepareDesktopToolchain } from '../toolchain.mjs'
+import { prepareDesktopToolchain } from '../lib/toolchain.mjs'
 
 test('creates a self-contained DSH and pnpm Agent toolchain', (t) => {
   if (process.platform !== 'win32') return t.skip('Windows command shims')

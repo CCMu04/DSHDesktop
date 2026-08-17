@@ -5,7 +5,7 @@ import {
   parseWindowState,
   sanitizeWindowState,
   serializeWindowState,
-} from '../window-state.mjs'
+} from '../lib/window-state.mjs'
 
 const AREA = { x: 0, y: 0, width: 1920, height: 1040 }
 

@@ -3,7 +3,7 @@ import test, { after } from 'node:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { AUTO_CHECK_INTERVAL_MS, shouldAutoCheck } from '../update-throttle.mjs'
+import { AUTO_CHECK_INTERVAL_MS, shouldAutoCheck } from '../lib/update-throttle.mjs'
 
 // 隔离真实用户数据：默认参数路径会读 $DSH_HOME/desktop-auto-update.json，
 // 用户机器上存在真实文件时会让「无记录」断言失败。

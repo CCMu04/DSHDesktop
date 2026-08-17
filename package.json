@@ -23,7 +23,7 @@
     "dist": "npm run sync:dsh && node scripts/write-plugin-version.mjs && node scripts/patch-nsis-templates.mjs && npm run prepare:runtime && npm run prepare:node && electron-builder --win nsis portable --x64",
     "dist:offline": "node scripts/patch-nsis-templates.mjs && npm run prepare:runtime && npm run prepare:node && electron-builder --win nsis portable --x64",
     "dist:x64:offline": "npm run dist:offline",
-    "format": "prettier --write main.mjs git-bash.mjs builtin-plugin.mjs toolchain.mjs runtime-preload.cjs scripts/*.mjs test/*.mjs test/*.cjs plugins/dsh-desktop-ui/lib/*.js presets/minimal-gitbash/gitbash-executor.mjs"
+    "format": "prettier --write main.mjs lib/*.mjs runtime-preload.cjs scripts/*.mjs test/*.mjs test/*.cjs plugins/dsh-desktop-ui/lib/*.js presets/minimal-gitbash/gitbash-executor.mjs"
   },
   "dependencies": {
     "@deepseek-ai/cordis-plugin-group": "1.0.1",
@@ -75,15 +75,7 @@
     },
     "files": [
       "main.mjs",
-      "builtin-plugin.mjs",
-      "git-bash.mjs",
-      "close-behavior.mjs",
-      "update-check.mjs",
-      "update-prompt.mjs",
-      "update-throttle.mjs",
-      "window-state.mjs",
-      "native-open-bridge.mjs",
-      "toolchain.mjs",
+      "lib/**/*",
       "runtime-preload.cjs",
       "loading.html",
       "assets/**/*",

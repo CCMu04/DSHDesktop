@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { ensureBundledPlugin } from '../builtin-plugin.mjs'
+import { ensureBundledPlugin } from '../lib/builtin-plugin.mjs'
 
 function fixture(root, version = '1.0.0', body = 'first') {
   const sourceDirectory = path.join(root, 'source')
