@@ -118,14 +118,14 @@ updatesExports.apply(ctx)
 featuresExports.apply(ctx)
 await new Promise((resolve) => setTimeout(resolve, 10)) // 等待配置收敛（enabled=false）
 
-const ids = () => registered.map((r) => r.entry.options?.id).sort()
-// updates: feature card (updates) + features: group card (dsh-desktop-features)
+const ids = () => registered.map((r) => r.entry.options?.key ?? r.entry.options?.id).sort()
+// updates: feature card (updates) + features: group card (key "desktop-features")
 // — the settings section must NOT be registered while enabled=false.
-if (JSON.stringify(ids()) !== JSON.stringify(['dsh-desktop-features', 'updates'])) {
+if (JSON.stringify(ids()) !== JSON.stringify(['desktop-features', 'updates'])) {
   throw new Error(`disabled state wrong: ${ids().join(', ')}`)
 }
 // the features group card declares the child slot
-const group = registered.find((r) => r.entry.options?.id === 'dsh-desktop-features')
+const group = registered.find((r) => r.entry.options?.key === 'desktop-features')
 if (!group.entry.options.children?.['desktop.features.item']) {
   throw new Error('features card must declare desktop.features.item child slot')
 }

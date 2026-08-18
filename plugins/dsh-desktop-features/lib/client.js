@@ -331,8 +331,15 @@ window.__ModuleLoader__.load({
         ctx.slots.register(
           {
             name: "settings.plugin.item",
+            // 双兼容注册（迁移桥）：
+            //   - key：rc.7 keyed 契约，必须是宿主已登记的 settings 命名空间
+            //     （dsh-desktop-features 的宿主半注册了 "desktop-features"），
+            //     tab 按 key 配对调度；
+            //   - id：rc.6 list 契约仍要求 id（旧运行时的校验按声明种类走），
+            //     rc.7 keyed 槽完全忽略 id——两个运行时都能注册并渲染。
+            // 官方运行时全线升到 rc.7 后，id 可移除。
+            key: "desktop-features",
             id: "dsh-desktop-features",
-            order: 110,
             locale: NS,
             children: {
               "desktop.features.item": { kind: "list", scope: "root" },

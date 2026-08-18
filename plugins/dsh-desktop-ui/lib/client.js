@@ -829,8 +829,12 @@ window.__ModuleLoader__.load({
             ctx.slots.register(
               {
                 name: "settings.plugin.item",
+                // 双兼容注册（迁移桥）：key 供 rc.7 keyed 契约配对（必须是宿主
+                // 已登记的 settings 命名空间 "desktop-ui"）；id 供 rc.6 list 契约
+                // 校验（旧运行时要求 id，rc.7 忽略）。官方运行时全线升到 rc.7
+                // 后，id 可移除。
+                key: "desktop-ui",
                 id: "dsh-desktop-ui-config",
-                order: 100,
                 locale: NS,
               },
               DesktopUiConfigCard,

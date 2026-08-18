@@ -113,7 +113,7 @@ plugins/dsh-desktop-<name>/
 
 | 级 | 用法示例 |
 |---|---|
-| ① | 聚合卡片 → `settings.plugin.item`；功能开关条目 → `desktop.features.item` 数据接口；会话头按钮 → `conversation.session.header.utilities`；整框浮层 → `shell.overlay`；设置页 → `settings.section` |
+| ① | 聚合卡片 → `settings.plugin.item`（keyed，key = 宿主登记的 settings 命名空间）；功能开关条目 → `desktop.features.item` 数据接口；会话头按钮 → `conversation.session.header.utilities`；整框浮层 → `shell.overlay`；设置页 → `settings.section` |
 | ② | 聚合插件在注册条目的 `children` 声明子插槽，功能插件注册条目 + inject 数据接口 |
 | ③ | 预览复用官方 `MarkdownText` / `ReadBlock`；确认对话框复用官方 `RiskConfirmation`；剪贴板用官方 `writeClipboard` |
 | ④ | 不应出现正例——进入该级意味着前三级的约束已全部失败 |
@@ -160,8 +160,10 @@ plugins/dsh-desktop-<name>/
 职责：开关持久化 + 提供 HTTP API。核心约定：
 
 - 导出 `name`（与 patch 行 id 一致）、`inject = ["webServer"]`、`DEFAULT_CONFIG`、`apply(ctx, config)`；
+- **宿主半可以 import 运行时提供的 `@deepseek-ai/*` 包**（如 `dsh-settings`、`schemastery`）：部署期 `main.mjs` 会把运行时的 `@deepseek-ai` 目录 junction 到 `builtin-plugins/node_modules/@deepseek-ai`（见 §11 步骤 0），插件裸导入即可命中运行时版本；**不应**在插件目录内自带 node_modules；
 - **开关配置路由统一为**：`/api/desktop-<name>/config`，`kind: "exact"`，一个 handler 分发 GET/HEAD/POST（官方 `dsh-host-webserver` 拒绝重复 `(kind, path)` 注册）；**功能路由按需增加**（如目录树、文本读写、状态/diff 等功能路由），全部受 §6.1 安全基线约束，并在 README「宿主 API 契约」登记；
 - **配置合并顺序**：内置默认值 ← 插件行 `config`（patch 层）← 用户开关文档，后覆盖前；
+- 需在官方「插件设置」页出卡片的插件，宿主半**必须登记一个 settings 命名空间**（`@deepseek-ai/dsh-settings` 的 `settingsNamespace` + `installSettingsSection` 或 `ctx.settings.register`），否则 rc.7 起 keyed 的 `settings.plugin.item` 槽永远不调度该卡片（见 §7.4.1）；登记时若无自有编辑字段（聚合卡），schema 用空对象即可。
 - 容错读取：文件缺失 / 损坏 → 空覆盖层（回退默认）；
 - 请求体 64KB 上限；错误统一 `{ok:false, error}`，状态码语义完整（400/403/404/405/413/415/500）。
 
@@ -278,6 +280,37 @@ applyConfig({ ...defaultConfig });                       // 先默认全开安�
 void loadConfig().then((config) => applyConfig(config)); // 配置到达后收敛重装
 ```
 
+### 7.4.1 设置卡片（settings.plugin.item）keyed 契约
+
+官方 DSH ≥ 0.1.0-rc.7 起，`settings.plugin.item` 从 list 槽改为**按 settings 命名空间 keyed** 的槽（「插件可自行注册设置卡片」功能）。旧写法 `{ id, order, label }` 不再生效，**必须**按新契约迁移：
+
+- **宿主半先登记命名空间**：用 `@deepseek-ai/dsh-settings` 的 `settingsNamespace("desktop-<name>")` + `installSettingsSection(ctx, ns, schema, entry, hooks)`（或 `ctx.settings.register(ns, schema, { base })`）把命名空间登记进设置存储。tab 只调度「宿主已 served 的命名空间 ∩ 注册了的卡片 key」；未登记的命名空间就算注册了卡片也**永远不渲染**。
+- **client 卡片用 key 注册**，不再提供 `id`/`order`（keyed 槽按 priority 排序，id/order 忽略）：
+
+```js
+ctx.slots.inject("settings.plugin.item", () =>
+  ctx.slots.register(
+    {
+      name: "settings.plugin.item",
+      key: "desktop-<name>",   // 必须与宿主登记的命名空间一致
+      id: "dsh-desktop-<name>", // 迁移桥：rc.6 list 契约校验需要 id（rc.7 忽略）
+      locale: NS,
+      // children / inject 等其余字段照旧
+    },
+    <CardComponent>,
+  ),
+);
+```
+
+> **双兼容迁移桥**：官方运行时尚未全线升到 rc.7 时（旧版安装包还在线），注册需
+> **同时携带 `key` 与 `id`**——槽位校验按声明种类走：rc.6 声明 list 要求 `id`，
+> rc.7 声明 keyed 要求 `key`；rc.7 的 keyed 渲染完全忽略多余的 `id`，带两个字段
+> 在两个运行时都能注册并渲染。官方运行时全线 rc.7 后，`id` 可移除。
+
+- 聚合类卡片（如「功能增强」分组板）不编辑自有字段：schema 用 `z.object({})`（`z` 来自 `@deepseek-ai/schemastery`）仅作配对 key；编辑类卡片（如配置卡）应让 schema 如实描述所编辑字段，值写入即进设置存储（`scope.update(patch)`），可保留 host 端点作为兼容/兜底。
+- 依赖声明：宿主半新增 `@deepseek-ai/dsh-settings`、`@deepseek-ai/schemastery`（随桌面壳依赖安装，运行时由 DSH 运行时提供）；无 settings 服务的环境（单测桩）必须显式防护（`typeof ctx.inject === "function"` 守卫），退化为纯文件存储。
+- 迁移检查清单：宿主命名空间存在 → client key 一致 → 设置页插件 tab 能看到卡片并正常读写。
+
 ### 7.5 服务访问与订阅
 
 - 客户端服务经 `ctx.get(...)` 获取；未就绪时**延迟重试**（500ms × 20）而非直接放弃；
@@ -327,9 +360,11 @@ void loadConfig().then((config) => applyConfig(config)); // 配置到达后收�
 
 应用启动时（`main.mjs` → `prepareBundledPlugins`）：
 
+0. **建立运行时依赖 junction**（`ensurePluginRuntimeExports`）：把运行时的 `@deepseek-ai` 目录 junction 到 `builtin-plugins/node_modules/@deepseek-ai`——插件物理位置在 builtin-plugins 下，Node 裸导入沿真实路径向上解析够不到运行时 node_modules，宿主半一旦 import `@deepseek-ai/*` 就会 `ERR_MODULE_NOT_FOUND`；运行时目录变化（升级）时自动重建。**目标路径注意**：运行时 `node_modules` 根 = `path.dirname(path.dirname(selectedRuntimeDirectory))`（`selectedRuntimeDirectory` 指向 `…/@deepseek-ai/dsh`，向上两级才是 node_modules 根），不要在它下面再拼 `node_modules`。**手动把插件拷进 builtin-plugins 调试宿主半的 `@deepseek-ai/*` 导入时，需确认该 junction 存在**（缺失时用 `New-Item -ItemType Junction` 重建）。
 1. 扫描 `plugins/` 下所有 `dsh-desktop-*` 目录；
 2. 对每个插件计算**内容指纹**（`version + 全文件 sha256`），与 `builtin-plugins.json`（`%APPDATA%\deepseek-harness-desktop\builtin-plugins.json`，按 DSH Home 键控）比对；
 3. 指纹匹配 → 跳过（**用户已做的启停选择保持不变**）；指纹变化或首次 → 部署到 `builtin-plugins/<package>` 并注册：`dsh plugin --profile web add --offline link:<部署目录>`（幂等）。
+4. **剪除不再分发的内置插件引用**（`pruneBundledPluginReferences`）：把 `~/.dsh/profiles/web/package.json` 中所有不在当前分发包集合内的 `dsh-desktop-*` 依赖与 bundles 行移除——插件从安装包移除后旧注册不会自动消失（profile 属用户数据、重装不清），残留的幽灵 link 会让后端启动失败；只动 `dsh-desktop-*`，不碰用户自建插件。
 
 注册结果落在 `~/.dsh/profiles/web`；客户端 bundle 由后端以 `/plugins/<id>/client.js` 提供。
 
@@ -342,6 +377,14 @@ Copy-Item plugins\dsh-desktop-<name> "…\resources\plugins\" -Recurse -Force  #
 
 > 新增插件时**不要**预写指纹标记（否则应用启动认为已处理而跳过注册）；已注册插件的内容更新可用临时脚本（`test/redeploy-*.mjs`，用后删除）。
 
+### 未纳入安装包的插件（开发中）
+
+开发中的插件（如 `dsh-desktop-browser`）可以保留在仓库 `plugins/` 下继续开发——`npm start` 开发模式仍会自动部署并注册它——但**默认不随安装包分发**：
+
+- `package.json` → `build.extraResources` 的 `plugins` 条目带 `filter: ["**/*", "!dsh-desktop-browser/**"]`，打包时排除该目录；被排除后安装版应用不会部署该插件（无卡片、无功能）；
+- 若插件带主进程模块（如 `browser-controller.mjs`），该模块仍须加入 `build.files` 打包（`main.mjs` 顶层 import 依赖它在安装包内存在），控制器实例化无副作用、命令无来源时不产生任何 UI；
+- 转正式时：移除 filter 排除项 → 该插件随下一版安装包分发。
+
 ### 开发期快速同步（直接改 builtin-plugins，绕过打包）
 
 ```powershell
@@ -350,6 +393,8 @@ Copy-Item plugins\dsh-desktop-<name>\lib "$env:APPDATA\deepseek-harness-desktop\
 
 - `~/.dsh/profiles/web/node_modules/dsh-desktop-<name>` 是 **Junction**，指向 builtin-plugins（pnpm link 落地形态）——覆盖 `node_modules` 等于写进 builtin-plugins；
 - **指纹过期无碍**：指纹只在应用更新/部署时用于决定是否从安装包拷贝，日常启动不校验；
+- **新插件（从未部署过）**：`builtin-plugins\<name>` 尚不存在，必须拷**整个插件目录**（`package.json` + `lib` + `cordis.patch.yml`），并完成下方两步注册；只拷 `lib` 仅适用于已注册插件的增量更新；
+- **快速起新插件（推荐）**：直接从仓库目录跑 `npm start`（dev 模式）——`prepareBundledPlugins` 会扫描 `plugins/` 并**自动部署 + 注册**新的 `dsh-desktop-*`（与打包安装同一套流程），零手工复制与改 profile；前置：完全退出已在运行的已安装应用（单实例锁）；
 - **新插件只放目录不加载**：必须手动注册两步（`~/.dsh/profiles/web/package.json`）：`dependencies` 加 `link:` 条目 + `dsh.profile.bundles` 数组加插件名；
 - **不要手改 `builtin-plugins.json`**：它是部署指纹清单，算错会触发异常覆盖；
 - **重启后验证**：`/api/desktop-<name>/config` 200（host 已加载）+ `/plugins/<id>/client.js` 200（client 已注册）。

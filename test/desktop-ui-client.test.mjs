@@ -153,12 +153,23 @@ if (!Array.isArray(moduleExports.inject)) throw new Error('inject export missing
 
 // --- run apply and let the async config convergence settle ----------------
 moduleExports.apply(ctx)
-const allOnIds = () => registered.map((r) => r.entry.options?.id).sort()
+const allOnIds = () => registered.map((r) => r.entry.options?.key ?? r.entry.options?.id).sort()
 // 视觉增强只有 config 卡片与打开工作区按钮条目注册 slot
 // （settingsDrawer 走 effect；sessionLogExport 因测试环境无
 // sessionLogDownload 控制器而只装样式，其按钮注册在独立 id 下不与官方冲突）。
-if (JSON.stringify(allOnIds()) !== JSON.stringify(['dsh-desktop-ui-config', 'open-workspace'])) {
+// rc.7 起 settings.plugin.item 为 keyed 契约：配置卡片以 settings 命名空间
+// key "desktop-ui" 注册（宿主半登记的命名空间），不再用 id。
+if (JSON.stringify(allOnIds()) !== JSON.stringify(['desktop-ui', 'open-workspace'])) {
   throw new Error(`all-on install entries wrong: ${allOnIds().join(', ')}`)
+}
+// 双兼容迁移桥：settings 卡片必须同时携带 key（rc.7 keyed 契约）与
+// id（rc.6 list 契约校验），旧运行时才能注册。
+const settingsCard = registered.find((r) => r.name === 'settings.plugin.item')
+if (
+  settingsCard?.entry.options?.key !== 'desktop-ui' ||
+  settingsCard?.entry.options?.id !== 'dsh-desktop-ui-config'
+) {
+  throw new Error('settings card must carry both key and id for rc.6/rc.7 dual compatibility')
 }
 // All-on installs every feature style plus the always-on styles (config card
 // + official-session-log-button hiding).
@@ -169,7 +180,7 @@ if (headStyles.length !== 7) {
 await new Promise((resolve) => setTimeout(resolve, 10))
 // 收敛后 settingsDrawer 关闭：抽屉 CSS 与 shim 被移除，条目不变。
 const ids = allOnIds()
-if (JSON.stringify(ids) !== JSON.stringify(['dsh-desktop-ui-config', 'open-workspace'])) {
+if (JSON.stringify(ids) !== JSON.stringify(['desktop-ui', 'open-workspace'])) {
   throw new Error(`converged entries wrong: ${ids.join(', ')}`)
 }
 const remainingStyles = headStyles.map((s) => s.dataset.pluginCss).sort()
@@ -195,8 +206,8 @@ const freshEntry = loaded[0]
 const freshExports = freshEntry.factory(requireStub)
 freshExports.apply(ctx)
 await new Promise((resolve) => setTimeout(resolve, 10))
-const ids2 = registered.map((r) => r.entry.options?.id).sort()
-if (JSON.stringify(ids2) !== JSON.stringify(['dsh-desktop-ui-config'])) {
+const ids2 = registered.map((r) => r.entry.options?.key ?? r.entry.options?.id).sort()
+if (JSON.stringify(ids2) !== JSON.stringify(['desktop-ui'])) {
   throw new Error(`all-off entries wrong: ${ids2.join(', ')}`)
 }
 // Everything off: only the always-on configuration-card style remains;

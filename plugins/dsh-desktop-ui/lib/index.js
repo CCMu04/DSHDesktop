@@ -2,13 +2,13 @@
  * dsh-desktop-ui — host half.
  *
  * 浏览器端功能开关的服务端：
- *   - 配置三层合并：内置默认值 < 插件行 config（profile patch 层）< desktop-ui.json
+ *   - 配置三层合并：内置默认值 < 插件行 config（profile patch 层）< 用户覆盖层
  *   - GET  /api/desktop-ui/config → 返回当前生效配置（浏览器端启动时拉取）
- *   - POST /api/desktop-ui/config → 写入 desktop-ui.json（设置页卡片保存时调用）
- *   - 配置持久化在 $DSH_HOME/desktop-ui.json，原子写入，损坏时自动回退默认
- *
- * 同一个 webServer 路由处理 GET/HEAD/POST：webserver 不允许同 path 重复注册，
- * 因此方法分发写在单个 handler 内。
+ *   - POST /api/desktop-ui/config → 写入覆盖层（设置页卡片保存时调用）
+ *   - 覆盖层优先走 DSH settings 存储（命名空间 "desktop-ui"，rc.7 设置页
+ *     keyed 契约的配对 key 即此命名空间）；旧版 desktop-ui.json 作为一次性
+ *     种子并入，并在每次写入时同步镜像，保证降级回旧版本不丢配置。
+ *   - 无 settings 服务（如单测桩 ctx）时退化为纯文件存储，行为与旧版一致。
  */
 import {
   closeSync,
@@ -22,12 +22,26 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { settingsNamespace } from "@deepseek-ai/dsh-settings";
+import z from "@deepseek-ai/schemastery";
 
 /** Stable cordis plugin name (matches the bundle patch insert id). */
 export const name = "dsh-desktop-ui";
 
 /** Services required before the config routes can mount. */
 export const inject = ["webServer"];
+
+/** 本插件的设置命名空间：client 端 settings.plugin.item 卡片注册的 key。 */
+export const SETTINGS_NAMESPACE = settingsNamespace("desktop-ui");
+
+/** 命名空间 schema：与 DEFAULT_CONFIG 的五个布尔开关一一对应。 */
+export const SETTINGS_SCHEMA = z.object({
+  settingsDrawer: z.boolean(),
+  sessionLogExport: z.boolean(),
+  statsLine: z.boolean(),
+  openWorkspace: z.boolean(),
+  chatPolish: z.boolean(),
+});
 
 /** Every feature switch and its default state (all on). 顺序即卡片行序。 */
 export const DEFAULT_CONFIG = Object.freeze({
@@ -52,7 +66,7 @@ function desktopUiHomeDir() {
   return configured || join(homedir(), ".dsh");
 }
 
-/** Absolute path of the user-editable overrides document. */
+/** Absolute path of the user-editable overrides document (legacy mirror). */
 function configPath() {
   return join(desktopUiHomeDir(), "desktop-ui.json");
 }
@@ -154,12 +168,44 @@ function readJsonBody(req) {
  */
 export function apply(ctx, config = {}) {
   const patchLayer = narrowPatch(config);
+  // settings 命名空间挂载：存在 settings 服务时注册 "desktop-ui"（rc.7 设置页
+  // keyed 契约要求宿主先登记命名空间，tab 才会调度该命名空间下的卡片），并把
+  // 旧版 desktop-ui.json 的覆盖层一次性并入作为种子。设置服务缺席（单测桩）
+  // 时跳过，退化为纯文件存储。
+  let settingsScope;
+  let settingsSeeded = false;
+  if (typeof ctx.inject === "function") {
+    ctx.inject(["settings"], async (sctx) => {
+      const scope = sctx.settings.register(
+        SETTINGS_NAMESPACE,
+        SETTINGS_SCHEMA,
+        { base: { ...DEFAULT_CONFIG, ...patchLayer } },
+      );
+      settingsScope = scope;
+      const legacy = readOverrides();
+      if (Object.keys(legacy).length > 0) {
+        try {
+          await scope.update(legacy);
+        } catch {
+          // 种子失败不致命：继续用文件层，之后的写入会直接进 settings 存储。
+        }
+      }
+      settingsSeeded = true;
+      sctx.effect(() => () => {
+        if (settingsScope === scope) {
+          settingsScope = undefined;
+          settingsSeeded = false;
+        }
+      });
+    });
+  }
+
   /** Effective configuration: defaults ← patch layer ← user overrides. */
-  const resolve = () => ({
-    ...DEFAULT_CONFIG,
-    ...patchLayer,
-    ...readOverrides(),
-  });
+  const resolve = () => {
+    const settled = settingsScope?.get();
+    if (settingsSeeded && settled !== undefined) return settled;
+    return { ...DEFAULT_CONFIG, ...patchLayer, ...readOverrides() };
+  };
 
   const route = {
     kind: "exact",
@@ -187,16 +233,24 @@ export function apply(ctx, config = {}) {
           return;
         }
         readJsonBody(req).then(
-          (body) => {
+          async (body) => {
             const patch = narrowPatch(body);
             if (Object.keys(patch).length === 0) {
               json(res, 400, { ok: false, error: "no-boolean-fields" });
               return;
             }
             try {
-              // Merge over the previous overrides: a partial POST updates only
-              // the fields it carries.
-              writeOverrides({ ...readOverrides(), ...patch });
+              const options = { ...readOverrides(), ...patch };
+              // 写入 settings 存储（失败不致命，文件兜底保证语义不变）。
+              if (settingsScope !== undefined) {
+                try {
+                  await settingsScope.update(patch);
+                } catch {
+                  // 只读部署或写链失败 → 仍以文件为准。
+                }
+              }
+              // 文件同步镜像：降级回旧版本时配置不丢。
+              writeOverrides(options);
               json(res, 200, { ok: true, config: resolve() });
             } catch {
               json(res, 500, { ok: false, error: "config-write-failed" });

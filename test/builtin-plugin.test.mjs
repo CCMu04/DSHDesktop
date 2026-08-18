@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { ensureBundledPlugin } from '../lib/builtin-plugin.mjs'
+import { ensureBundledPlugin, pruneBundledPluginReferences } from '../lib/builtin-plugin.mjs'
 
 function fixture(root, version = '1.0.0', body = 'first') {
   const sourceDirectory = path.join(root, 'source')
@@ -59,4 +59,50 @@ test('enables again after bundled content changes or for another DSH Home', asyn
     readFileSync(path.join(userDataDirectory, 'builtin-plugins', 'dsh-desktop-ui', 'lib', 'index.js'), 'utf8'),
     'updated\n',
   )
+})
+
+test('prunes bundled-plugin references that no longer ship from the web profile', async (t) => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-desktop-prune-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const profile = path.join(root, 'web', 'package.json')
+  mkdirSync(path.dirname(profile), { recursive: true })
+  writeFileSync(
+    profile,
+    `${JSON.stringify(
+      {
+        name: 'dsh-web-profile',
+        dependencies: {
+          'dsh-desktop-shipped': 'link:C:/a/dsh-desktop-shipped',
+          'dsh-desktop-browser': 'link:C:/a/dsh-desktop-browser',
+          'my-own-plugin': 'link:C:/a/my-own-plugin',
+          '@deepseek-ai/dsh': '0.1.0-rc.7',
+        },
+        dsh: {
+          profile: {
+            bundles: [
+              '@deepseek-ai/dsh-web-app',
+              'dsh-desktop-shipped',
+              'dsh-desktop-browser',
+              'my-own-plugin',
+            ],
+          },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    'utf8',
+  )
+
+  const changed = pruneBundledPluginReferences(profile, ['dsh-desktop-shipped'])
+  assert.equal(changed, true)
+  const pruned = JSON.parse(readFileSync(profile, 'utf8'))
+  assert.deepEqual(Object.keys(pruned.dependencies).sort(), ['@deepseek-ai/dsh', 'dsh-desktop-shipped', 'my-own-plugin'])
+  assert.deepEqual(pruned.dsh.profile.bundles, ['@deepseek-ai/dsh-web-app', 'dsh-desktop-shipped', 'my-own-plugin'])
+
+  // Idempotent: a second run over an already-clean profile changes nothing.
+  assert.equal(pruneBundledPluginReferences(profile, ['dsh-desktop-shipped']), false)
+
+  // Missing/unreadable profile is a safe no-op.
+  assert.equal(pruneBundledPluginReferences(path.join(root, 'nope', 'package.json'), []), false)
 })

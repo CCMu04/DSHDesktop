@@ -46,7 +46,7 @@
 
 | 位置 / 服务 | 条目或依赖 | 用途 |
 |---|---|---|
-| `settings.plugin.item` | `dsh-desktop-ui-config`, order 100 | 视觉增强五键配置卡片 |
+| `settings.plugin.item` | `key: "desktop-ui"` + `id: "dsh-desktop-ui-config"` | 视觉增强五键配置卡片 |
 | `conversation.session.header.utilities` | `open-workspace`, order 20 | 打开当前工作区 |
 | `conversation.session.header.utilities` | `dsh-desktop-ui-session-log-download`, order 30 | 导出当前 Session |
 | `sessionLogDownload` | `ctx.get()` | 导出状态、下载和关闭对话框 |
@@ -133,7 +133,7 @@
 
 ## 10. 维护与升级检查清单
 
-- [ ] `settings.plugin.item`、`conversation.session.header.utilities` slot 仍存在，id/order 未冲突。
+- [ ] `settings.plugin.item` 仍为 keyed 契约（`key: "desktop-ui"`），且宿主半登记的 `desktop-ui` 命名空间存在；`conversation.session.header.utilities` slot 仍存在，id 未冲突。
 - [ ] `sessionLogDownload`、`workspaces`、`sessions` 服务签名和快照结构未变。
 - [ ] Modal selector、mask/content/header/closeButton 结构未变。
 - [ ] `[data-slot="conversation.session.header"]` header 子结构未变。

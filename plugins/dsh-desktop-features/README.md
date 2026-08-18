@@ -30,8 +30,8 @@
 ```
 ┌──────────────────────────── 浏览器侧（client） ────────────────────────────┐
 │                                                                            │
-│  dsh-desktop-features（本插件，无 host）                                    │
-│    └─ 注册进官方 settings.plugin.item（id "dsh-desktop-features", order 110）│
+│  dsh-desktop-features（本插件，host 仅注册 settings 命名空间）              │
+│    └─ 注册进官方 settings.plugin.item（key "desktop-features"，rc.7 keyed 契约）│
 │        ├─ 声明子插槽 desktop.features.item（list / root）                    │
 │        └─ 渲染 FeaturesGroupCard（聚合 UI）                                  │
 │              │  entries() + subscribe()                                     │
@@ -60,9 +60,14 @@
 
 | 插槽 | 注册条目 | 用途 |
 |---|---|---|
-| `settings.plugin.item` | `id: "dsh-desktop-features"`, `order: 110` | 插件配置页（可配置页签）里的一张卡片 |
+| `settings.plugin.item` | `key: "desktop-features"` + `id: "dsh-desktop-features"` | 插件配置页（可配置页签）里的一张卡片 |
 
-`settings.plugin.item` 是官方 list 槽（每条目一张插件卡片，内置 bash / agent-loop / web-search）。本插件以 `order: 110` 排在后面，卡片本身是「功能增强」分组。
+rc.7 起 `settings.plugin.item` 是**按 settings 命名空间 keyed** 的槽：宿主半必须先用
+`@deepseek-ai/dsh-settings` 登记同名命名空间（`settingsNamespace("desktop-features")`，
+本插件 schema 为空——聚合卡不编辑自有字段，命名空间仅用于 tab 配对调度），client 卡片
+以 `key: "desktop-features"` 注册（**同时保留 `id` 作迁移桥**：rc.6 旧运行时把该槽声明
+为 list、校验要求 id，rc.7 keyed 槽忽略 id；官方运行时全线 rc.7 后 id 可移除）。卡片
+本身是「功能增强」分组，内部通过子插槽 `desktop.features.item` 渲染各功能开关。
 
 ### 2.2 声明的子插槽
 
@@ -230,7 +235,7 @@ status: "ready"（rows + draft，展示开关行）      status: "error"（显�
 
 ## 10. 维护与升级检查清单
 
-- [ ] `settings.plugin.item` 插槽仍存在（卡片注册不炸）
+- [ ] `settings.plugin.item` 仍为 keyed 契约（`key: "desktop-features"`），且宿主半登记的 `desktop-features` 命名空间存在（tab 按命名空间配对调度卡片）
 - [ ] `ctx.slots.inject` / `register` / `entriesOfSlot` / `subscribe` 的运行时签名未变（`dsh-client-runtime`；已从 `entries` 切到 `entriesOfSlot`）
 - [ ] 各子插件的 `/api/desktop-*/config` 端点路径与响应格式未变
 - [ ] 实测回归：展开卡片、加载各开关状态、单个切换、重置、保存（含"无修改时保存禁用"）、保存后各功能实际生效、子插件注销后行消失

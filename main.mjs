@@ -30,7 +30,8 @@ import {
   Tray,
 } from 'electron'
 import electronUpdater from 'electron-updater'
-import { ensureBundledPlugin } from './lib/builtin-plugin.mjs'
+import { BrowserController, CMD_MARKER as browserCmdMarker } from './browser-controller.mjs'
+import { ensureBundledPlugin, ensurePluginRuntimeExports, pruneBundledPluginReferences } from './lib/builtin-plugin.mjs'
 import {
   ensureGitBash,
   ensureMinimalGitBashPreset,
@@ -120,6 +121,9 @@ let tray
 let quitting = false
 let recentBackendOutput = ''
 let runtimeDirectory
+// 工作台内置浏览器（WebContentsView 原生视图）控制器；随主窗口创建。
+// 视图懒创建：首次收到渲染侧命令时才实例化，避免不做浏览也占资源。
+let browserController
 
 // 主进程日志流（模块级）：后端 stdout 与主进程自身诊断（自动更新等）
 // 都写入同一文件。此前 logStream 是 startBackend 的局部变量，主进程
@@ -426,6 +430,19 @@ function prepareBackendContext() {
 }
 
 async function prepareBundledPlugins(context) {
+  // 内置插件的宿主半可以 import 运行时提供的 @deepseek-ai/* 包（如
+  // dsh-settings / schemastery）。插件部署在 builtin-plugins 下，Node 裸导入
+  // 沿真实路径向上解析够不到运行时 node_modules，因此把运行时的
+  // @deepseek-ai 目录 junction 到 builtin-plugins/node_modules/@deepseek-ai。
+  // selectedRuntimeDirectory 是 `<nodeModules根>/@deepseek-ai/dsh`，向上两级
+  // 即父目录（打包= runtime-cache/current/node_modules；开发= shell/node_modules）。
+  const runtimeNodeModulesDirectory = path.dirname(
+    path.dirname(context.selectedRuntimeDirectory),
+  )
+  ensurePluginRuntimeExports({
+    userDataDirectory: app.getPath('userData'),
+    runtimeNodeModulesDirectory,
+  })
   // Every bundled plugin is its own directory under the plugins root; each
   // keeps an independent fingerprint + install record (builtin-plugins.json
   // keys by package name), so adding or removing a plugin never touches the
@@ -458,6 +475,12 @@ async function prepareBundledPlugins(context) {
         ),
     })
   }
+  // 剪除「已不再随包分发」的内置插件在 web profile 里的引用（幽灵 link 会让
+  // 后端启动失败，且 profile 属用户数据、重装不清 → 必须部署期自愈）。
+  pruneBundledPluginReferences(
+    path.join(context.dshHome, 'profiles', 'web', 'package.json'),
+    names,
+  )
 }
 
 function startBackend(port, context) {
@@ -815,6 +838,19 @@ function configureNavigation(window) {
   window.webContents.on('console-message', (details) => {
     const message = details?.message
     if (typeof message !== 'string') return
+    // 工作台内置浏览器命令（渲染→主，JSON 负载）：交给 BrowserController。
+    if (message.startsWith(browserCmdMarker)) {
+      const raw = message.slice(browserCmdMarker.length).trim()
+      if (raw.length > 0) {
+        try {
+          browserController?.handleCommand(JSON.parse(raw))
+        } catch (error) {
+          // 命令异常落日志（此前静默吞掉，排查困难）。
+          appendBackendOutput(`[dsh-browser] command error: ${String(error)}\n`)
+        }
+      }
+      return
+    }
     if (message.startsWith(desktopWakeMarker)) {
       showMainWindow()
       return
@@ -847,6 +883,8 @@ function configureNavigation(window) {
     if (!message.startsWith(titleBarThemeMarker)) return
     const dark = message.slice(titleBarThemeMarker.length).includes('dark')
     syncTitleBarOverlay(window, dark ? titleBarSymbolDark : titleBarSymbolLight)
+    // 工作台内置浏览器视图底色跟随主题（页面加载前/透明页时可见）。
+    browserController?.setTheme(dark)
   })
 
   nativeTheme.on('updated', () => {
@@ -893,6 +931,14 @@ async function createWindow() {
   }
   mainWindow = new BrowserWindow(windowOptions)
   configureNavigation(mainWindow)
+  // 工作台内置浏览器控制器：原生视图只能在主进程创建，命令/状态经
+  // console 标记 + CustomEvent 双通道与渲染侧插件通信（与托盘/更新同款）。
+  browserController = new BrowserController({
+    getWindow: () => mainWindow,
+    isBackendUrl,
+    // 诊断日志写进 backend.log（appendBackendOutput 走主进程日志流）。
+    log: (message) => appendBackendOutput(`[dsh-browser] ${message}\n`),
+  })
   // Closing the window stops the local backend and its reserved port, which
   // changes the Web address on next launch. Unless the user chose to fully
   // quit (and remembered it), the window minimizes to the tray instead; the
@@ -1106,6 +1152,7 @@ app.on('before-quit', () => {
   if (quitting) return
   quitting = true
   saveWindowState()
+  browserController?.destroy()
   tray?.destroy()
   stopBackend()
 })

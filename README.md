@@ -50,6 +50,8 @@ DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中�
 - `dsh-desktop-notify` — **功能增强：完成提醒**
 - `dsh-desktop-tray` — **托盘命令桥**（新建任务 / 添加工作区 / 检查更新）
 
+> `dsh-desktop-browser`（工作台内置浏览器）正在开发中：仓库源码随 `npm start` 开发模式部署调试，但**暂不随安装包分发**（打包配置里的 `extraResources` 过滤器已排除它，转正式时移除过滤器即随下一版发布）。
+
 ### Git Bash 按需内置（极简模式 (Git Bash)）
 
 DSH 的极简模式预设依赖 `bash`，但 Windows 默认没有。桌面端内置了自研的「极简模式 (Git Bash)」agent preset（`presets/minimal-gitbash/`，灵感来自社区 [dsh-gitbash-preset](https://github.com/liceses/dsh-gitbash-preset) 与 [dsh-win32](https://github.com/sjh9714/dsh-win32)，见 [第三方声明](THIRD_PARTY_NOTICES.md)），并负责两件事：
@@ -119,6 +121,12 @@ npm run dist
 npm ci
 npm run dist:offline
 ```
+
+> **下载源说明**：electron-builder 构建时需联网拉取 Electron 发行包与
+> winCodeSign/NSIS 等工具集。构建脚本在未设置环境变量时默认走 npmmirror 镜像
+> （`ELECTRON_MIRROR` / `ELECTRON_BUILDER_BINARIES_MIRROR`，GitHub 二进制被墙
+> 的网络下也能构建）；已设置的环境变量优先，可自行覆盖为 GitHub 直连或其他镜像。
+
 
 ## 工作原理
 

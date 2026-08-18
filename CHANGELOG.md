@@ -2,6 +2,31 @@
 
 本文件记录 DSH Desktop 各版本的变更，新版本在上。格式固定为：版本标题（`## v<版本号> — <日期>`）+ 分类小节（新增 / 修复 / 变更 / 移除）。模板见 [docs/TEMPLATES.md](docs/TEMPLATES.md)。
 
+## v0.1.0-rc.7.6.6 — 2026-08-18
+
+官方 DSH 运行时升级到 0.1.0-rc.7，并把两张设置卡片迁移到 rc.7 的 keyed 设置插槽契约；内置浏览器（dsh-desktop-browser）开发中暂不随安装包分发。
+
+### 变更
+
+- **官方 DSH 运行时升级 0.1.0-rc.6 → 0.1.0-rc.7**：全部 `@deepseek-ai/dsh*` 依赖升至 rc.7；node-pty 升至 1.2.0-beta.15（PTY 平台兼容性改善）、极简模式持久 Bash 卡顿修复、max-token 截断会话续跑修复、提问卡片折叠等官方更新随运行时生效。
+- **设置卡片迁移到 rc.7 keyed 契约**：官方 0.1.0-rc.7 起 `settings.plugin.item` 由 list 槽改为**按 settings 命名空间 keyed**（插件可自行注册设置卡片）：
+  - `dsh-desktop-features`：宿主半新增 `@deepseek-ai/dsh-settings` 命名空间登记（`desktop-features`，空 schema 作配对 key），client 卡片注册从 `id/order` 改为 `key: "desktop-features"`;
+  - `dsh-desktop-ui`：宿主半登记 `desktop-ui` 命名空间（五键 boolean schema），`/api/desktop-ui/config` 优先读写设置存储，旧 `desktop-ui.json` 一次性种子并入 + 每次写入同步镜像（降级回旧版本不丢配置），无 settings 服务时退化为纯文件；client 卡片注册改为 `key: "desktop-ui"`。
+- **依赖调整**：新增 `@deepseek-ai/dsh-settings`、`@deepseek-ai/schemastery`（宿主插件登记设置命名空间所需）。
+- **构建脚本内置 Electron 下载镜像默认值**：新增 `scripts/electron-builder.mjs` 包装器，`dist` / `dist:offline` 经其启动 electron-builder——未设置环境变量时默认使用 npmmirror 镜像（`ELECTRON_MIRROR` / `ELECTRON_BUILDER_BINARIES_MIRROR`），GitHub 二进制被墙的网络下也能构建；已设置的环境变量优先。
+
+### 修复
+
+- **内置插件宿主半的运行时依赖解析**：`dsh-desktop-features` / `dsh-desktop-ui` 宿主半 import `@deepseek-ai/dsh-settings` 时，因插件部署在 `builtin-plugins` 下、Node 裸导入解析够不到运行时 node_modules，直接 `dsh web` 启动会报 `ERR_MODULE_NOT_FOUND`。部署期新增 `builtin-plugins/node_modules/@deepseek-ai` junction（指向运行时 `@deepseek-ai` 目录，运行时升级自动重建）。
+- **`dsh-desktop-features` 宿主半重复导出**：`SETTINGS_NAMESPACE` 同时经 `export const` 与导出列表导出导致 `SyntaxError: Duplicate export`，已修复并补回归测试（`test/desktop-features-config.test.mjs`）。
+- **设置卡片双兼容迁移桥**：`settings.plugin.item` 注册同时携带 `key` 与 `id`——槽位校验按声明种类走，rc.6 旧运行时声明 list 要求 `id`（否则 `requires options.id` 导致插件加载失败），rc.7 声明 keyed 要求 `key`、完全忽略多余 `id`；两个运行时的安装包都能正常注册并渲染卡片，官方运行时全线 rc.7 后 `id` 可移除。
+- **修复桌面端启动失败（junction 路径 bug）**：`prepareBundledPlugins` 计算运行时 `node_modules` 根时，打包模式误用 `path.join(selectedRuntimeDirectory, 'node_modules')`，`selectedRuntimeDirectory` 实际指向 `runtime-cache/current/node_modules/@deepseek-ai/dsh`，得到 `…\dsh\node_modules\@deepseek-ai`（不存在）→ `ensurePluginRuntimeExports` 抛「Bundled runtime packages are missing」→ 桌面端每次启动都失败且安装版必现。统一改为 `path.dirname(path.dirname(selectedRuntimeDirectory))`（两种模式同一公式），已验证桌面端完整启动。
+- **剪除不再分发插件在 web profile 里的引用**：某内置插件从安装包移除后（如暂不分发的 `dsh-desktop-browser`），其旧注册记录仍留在 `~/.dsh/profiles/web/package.json`（dependencies 的 `link:` 条目 + bundles 行），后端每次启动解析幽灵 link 而失败，且 profile 属用户数据、重装不清 → 无法恢复。部署期新增 `pruneBundledPluginReferences`：幂等移除所有不在当前分发包集合内的 `dsh-desktop-*` 引用（不触碰用户自建插件），并补回归测试（`test/builtin-plugin.test.mjs`）。
+
+### 移除
+
+- 内置浏览器（dsh-desktop-browser）暂不随安装包分发：`build.extraResources.plugins` 过滤器排除该目录；仓库源码保留，开发模式（`npm start`）仍会自动部署调试；`browser-controller.mjs` 纳入 `build.files` 打包（主进程静态 import 依赖）。
+
 ## v0.1.0-rc.6.6.5 — 2026-08-16
 
 修复自动更新全流程在真实环境暴露的一系列问题（6.6.4 首次上线后经多轮实测定位），并完成弹窗 / 侧栏按钮的 UI 打磨。现状：安装版检测到新版本后**立即弹窗**（插件侧判定，不再依赖 electron-updater 的慢速检查）→「立即更新」开始下载并显示进度 → 下载完成弹窗「立即重启安装」（退出时自动安装）；侧栏「更新」按钮随阶段显示「更新 / 下载中 x% / 重启安装」；「下次不再自动提醒」勾选后同版本不再弹窗、按钮保留。
