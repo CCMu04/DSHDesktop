@@ -28,7 +28,10 @@ jobs:
       - run: npm test
       - run: npm run prepare:runtime
       - run: npm run prepare:node
-      - run: npx electron-builder --win nsis portable --x64 --publish never
+      # 经 scripts/electron-builder.mjs 启动：未设 ELECTRON_MIRROR /
+      # ELECTRON_BUILDER_BINARIES_MIRROR 时默认走 npmmirror 镜像（全球可达），
+      # 避免 electron-builder 从 GitHub CDN 拉 Electron/工具集时在 runner 上卡死。
+      - run: node scripts/electron-builder.mjs --win nsis portable --x64 --publish never
       - name: Save x64 assets
         uses: actions/upload-artifact@v4
         with:
