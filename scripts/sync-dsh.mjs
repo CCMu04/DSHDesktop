@@ -18,9 +18,13 @@ function runNpm(args, capture = false) {
 }
 
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-const runtimePackages = Object.keys(manifest.dependencies ?? {}).filter(
-  name => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-'),
-)
+// 运行时包分散在 dependencies 与 devDependencies 中（见 prepare-runtime.mjs 的
+// 说明：dsh-* 运行时全家桶放 devDependencies，避免 electron-builder 分析巨型
+// 依赖树）。同步时两者都要扫到并统一升到最新版本。
+const runtimePackages = [
+  ...Object.keys(manifest.dependencies ?? {}),
+  ...Object.keys(manifest.devDependencies ?? {}),
+].filter(name => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-'))
 
 if (!runtimePackages.includes('@deepseek-ai/dsh')) {
   throw new Error('The desktop shell does not declare @deepseek-ai/dsh.')

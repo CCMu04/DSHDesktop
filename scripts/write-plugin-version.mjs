@@ -16,9 +16,9 @@ const SHELL_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const shellPackage = JSON.parse(readFileSync(join(SHELL_ROOT, 'package.json'), 'utf8'))
 const version = typeof shellPackage.version === 'string' ? shellPackage.version : '0.0.0'
 const dshVersion =
-  typeof shellPackage.dependencies?.['@deepseek-ai/dsh'] === 'string'
-    ? shellPackage.dependencies['@deepseek-ai/dsh']
-    : null
+  shellPackage.dependencies?.['@deepseek-ai/dsh'] ??
+  shellPackage.devDependencies?.['@deepseek-ai/dsh'] ??
+  null
 const target = join(SHELL_ROOT, 'plugins', 'dsh-desktop-updates', 'version.json')
 writeFileSync(target, `${JSON.stringify({ version, dshVersion }, null, 2)}\n`, 'utf8')
 console.log(`[write-plugin-version] wrote ${target} (${version}, dsh ${dshVersion})`)
