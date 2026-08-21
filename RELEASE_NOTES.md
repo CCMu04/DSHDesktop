@@ -13,6 +13,7 @@
 ## 桌面端修复与构建改进
 
 - 修复 rc.8 下文件 / Git 插件等待工作台服务时可能被重复注册的问题，页面不再出现 `duplicate tab id` 错误。
+- 适配 rc.8 的 Web UI 自动打开行为：桌面端显式禁用外部浏览器，只保留应用窗口。
 - DSH 同步命令支持通过 `DSH_VERSION` 精确指定预览版本，并兼容 npm 10 / npm 12 的版本查询输出。
 - pnpm 更新到 11.22.0；移除无用的根 `node-gyp` 依赖，原生模块继续使用 Electron 构建链提供的兼容版本。
 - CI 和发布构建新增完整依赖树校验；React / ReactDOM 与 Windows Squirrel 构建 peer 已显式锁定。

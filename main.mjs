@@ -498,6 +498,7 @@ function startBackend(port, context) {
       '--expose-internals',
       context.dshEntry,
       'web',
+      '--no-open',
       '--port',
       String(port),
     ],
