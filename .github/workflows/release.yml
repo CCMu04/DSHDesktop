@@ -79,7 +79,7 @@ jobs:
             Select-Object -ExpandProperty FullName
           gh release create $tag @assets `
             --repo $env:GITHUB_REPOSITORY `
-            --title "DSH Desktop $tag" `
+            --title "DSH Dock $tag" `
             --notes-file RELEASE_NOTES.md `
             --prerelease `
             --verify-tag

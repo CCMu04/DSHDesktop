@@ -1,6 +1,6 @@
 {
   "name": "deepseek-harness-desktop",
-  "version": "0.1.0-rc.8.6.7",
+  "version": "0.1.0-rc.8.6.8",
   "description": "Unofficial Windows desktop shell for the unmodified DeepSeek Harness Web UI",
   "author": "CCMu04",
   "license": "MIT",
@@ -64,7 +64,7 @@
   },
   "build": {
     "appId": "ai.deepseek.harness.desktop",
-    "productName": "DSH Desktop",
+    "productName": "DSH Dock",
     "asar": true,
     "npmRebuild": false,
     "publish": [
@@ -147,7 +147,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "DSH Desktop",
+      "shortcutName": "DSH Dock",
       "differentialPackage": true
     },
     "portable": {

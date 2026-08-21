@@ -1,10 +1,16 @@
-# DSH Desktop
+<h1 align="center">
+  <img src="assets/brand/wordmark.svg" width="420" alt="DSH Dock" />
+</h1>
 
 > 面向 Windows 的非官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 桌面客户端。不修改官方源码，直接运行并呈现官方 Web UI。
 
 ## 为什么做这个项目
 
-DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中启动和管理服务。DSH Desktop 把这套官方 Web UI 包装成可直接双击运行的桌面程序，同时保留原生 DSH 的配置、会话、插件和工作区习惯。
+DeepSeek Harness 原生提供 Web 界面，但日常使用仍需要在终端中启动和管理服务。DSH Dock 把这套官方 Web UI 停靠到可直接双击运行的桌面程序中，同时保留原生 DSH 的配置、会话、插件和工作区习惯。
+
+## 品牌与项目关系
+
+DSH Dock 是独立的非官方社区桌面封装，不是 DeepSeek 或 DeepSeek Harness 的官方客户端。为减少用户对官方身份或背书关系的误解，并明确品牌素材边界，应用不再复用上游鲸鱼标识作为主图标，改用自有的终端 Dock 标记；辅助鲸鱼也是重新绘制的独立线条形象。详细说明见 [品牌说明](docs/BRAND.md)。
 
 ## 功能特性
 

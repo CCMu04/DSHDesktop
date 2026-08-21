@@ -621,7 +621,7 @@ function ensureTray() {
   tray = new Tray(
     nativeImage.createFromPath(path.join(shellDirectory, 'assets', 'icon.png')),
   )
-  tray.setToolTip('DSH Desktop')
+  tray.setToolTip('DSH Dock')
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: '显示主窗口', click: showMainWindow },
@@ -1136,7 +1136,7 @@ app.whenReady().then(async () => {
     const details = recentBackendOutput.trim()
     await dialog.showMessageBox({
       type: 'error',
-      title: 'DSH Desktop failed to start',
+      title: 'DSH Dock failed to start',
       message: error instanceof Error ? error.message : String(error),
       detail:
         details ||

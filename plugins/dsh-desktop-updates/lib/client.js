@@ -985,7 +985,7 @@ window.__ModuleLoader__.load({
       "updates.downloadedTitle": "更新已就绪",
       "updates.dismissReminder": "下次不再自动提醒",
       "feature.title": "检查更新",
-      "feature.description": "在设置中显示「检查更新」入口，手动检查 DSH Desktop 新版本并跳转下载",
+      "feature.description": "在设置中显示「检查更新」入口，手动检查 DSH Dock 新版本并跳转下载",
     };
     const en = {
       "updates.nav": "Check for updates",
@@ -1017,7 +1017,7 @@ window.__ModuleLoader__.load({
       "updates.dismissReminder": "Don't remind me again",
       "feature.title": "Check for updates",
       "feature.description":
-        "Show the update-check entry in settings, manually check for new DSH Desktop versions and jump to the download page",
+        "Show the update-check entry in settings, manually check for new DSH Dock versions and jump to the download page",
     };
     //#endregion
 

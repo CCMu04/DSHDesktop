@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="240" viewBox="0 0 960 240">
+  <g transform="translate(28 28) scale(.575)" fill="none" stroke="#111111" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M220 72H72V248" stroke-width="14"/>
+    <path d="M72 248H252" stroke-width="16"/>
+    <path d="M100 119L139 160L100 201M162 201H207" stroke-width="16"/>
+  </g>
+  <text x="232" y="151" fill="#111111" font-family="Segoe UI Variable Display, Segoe UI, Inter, Arial, sans-serif" font-size="82" font-weight="700" letter-spacing="-2">DSH</text>
+  <text x="405" y="151" fill="#111111" font-family="Segoe UI Variable Display, Segoe UI, Inter, Arial, sans-serif" font-size="82" font-weight="480" letter-spacing="-2">Dock</text>
+</svg>

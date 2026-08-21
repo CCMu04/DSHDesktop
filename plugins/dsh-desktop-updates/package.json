@@ -2,7 +2,7 @@
   "name": "dsh-desktop-updates",
   "private": true,
   "version": "1.0.0",
-  "description": "Desktop feature: check for DSH Desktop updates — version info in settings, manual update check, download prompt. Host half serves the switch config and the current shell version.",
+  "description": "Desktop feature: check for DSH Dock updates — version info in settings, manual update check, download prompt. Host half serves the switch config and the current shell version.",
   "type": "module",
   "main": "./lib/index.js",
   "exports": {
