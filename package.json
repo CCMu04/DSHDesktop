@@ -30,7 +30,7 @@
     "@emnapi/runtime": "1.11.3",
     "@img/sharp-wasm32": "0.35.3",
     "electron-updater": "^6.6.2",
-    "pnpm": "11.21.0"
+    "pnpm": "11.22.0"
   },
   "devDependencies": {
     "@deepseek-ai/dsh": "0.1.0-rc.7",
