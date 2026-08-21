@@ -1,6 +1,6 @@
 # 文档模板
 
-本目录存放 DSH Desktop 各类文档的固定格式模板。编写或更新文档时，复制对应模板并填写 `<...>` 占位符；不要改变章节顺序与标题层级。
+本目录存放 DSH Dock 各类文档的固定格式模板。编写或更新文档时，复制对应模板并填写 `<...>` 占位符；不要改变章节顺序与标题层级。
 
 所有文档一律使用简体中文，不使用截图或图片。
 
@@ -12,7 +12,7 @@
 ## README.md 模板
 
 ````markdown
-# DSH Desktop
+# DSH Dock
 
 > 面向 Windows 的非官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 桌面客户端。不修改官方源码，直接运行并呈现官方 Web UI。
 
@@ -58,7 +58,7 @@
 ````markdown
 # 更新日志
 
-本文件记录 DSH Desktop 各版本的变更，新版本在上。格式固定为：版本标题（`## v<版本号> — <日期>`）+ 分类小节（新增 / 修复 / 变更 / 移除）。模板见 [docs/TEMPLATES.md](docs/TEMPLATES.md)。
+本文件记录 DSH Dock 各版本的变更，新版本在上。格式固定为：版本标题（`## v<版本号> — <日期>`）+ 分类小节（新增 / 修复 / 变更 / 移除）。模板见 [docs/TEMPLATES.md](docs/TEMPLATES.md)。
 
 ## v<版本号> — <日期>
 
@@ -86,7 +86,7 @@
 ## RELEASE_NOTES.md 模板
 
 ````markdown
-# DSH Desktop v<版本号> 预览版
+# DSH Dock v<版本号> 预览版
 
 <一句话版本简介>
 
@@ -122,7 +122,7 @@
 ````markdown
 # 第三方声明
 
-DSH Desktop 下载或打包了第三方维护的软件。这些组件仍遵循其各自的开源许可。
+DSH Dock 下载或打包了第三方维护的软件。这些组件仍遵循其各自的开源许可。
 
 ## <组件名>
 

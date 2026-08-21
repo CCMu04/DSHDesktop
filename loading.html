@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DSH Desktop</title>
+    <title>DSH Dock</title>
     <style>
       /* Mirrors the official DSH boot screen (AppRoot boot gate, built from
          dsh-client-web AppRoot.module.css). Values are the resolved
@@ -42,14 +42,31 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 16px;
+        gap: 14px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #0f1115;
+      }
+      .brand-mark {
+        width: 34px;
+        height: 34px;
+        flex: none;
       }
       .wordmark {
-        font-size: 16px;
+        font-size: 18px;
         line-height: 24px;
-        font-weight: 600;
-        letter-spacing: 0.08em;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+      .mascot {
+        width: 112px;
+        height: 56px;
+        margin: -4px 0;
         color: #0f1115;
+        opacity: 0.16;
       }
       .spinner {
         width: 20px;
@@ -67,7 +84,8 @@
       }
       @media (prefers-color-scheme: dark) {
         body { background: #151517; }
-        .wordmark { color: #f9fafb; }
+        .brand, .mascot { color: #f9fafb; }
+        .mascot { opacity: 0.2; }
         .spinner {
           border-color: rgba(255, 255, 255, 0.12);
           border-top-color: #f9fafb;
@@ -79,7 +97,24 @@
   <body>
     <div class="titlebar-drag" aria-hidden="true"></div>
     <main class="card">
-      <div class="wordmark">DSH DESKTOP</div>
+      <div class="brand" aria-label="DSH Dock">
+        <svg class="brand-mark" viewBox="0 0 320 320" aria-hidden="true">
+          <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M220 72H72V248" stroke-width="14" />
+            <path d="M72 248H252" stroke-width="16" />
+            <path d="M100 119L139 160L100 201M162 201H207" stroke-width="16" />
+          </g>
+        </svg>
+        <div class="wordmark">DSH Dock</div>
+      </div>
+      <svg class="mascot" viewBox="0 0 640 320" aria-hidden="true">
+        <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M78 185C104 112 180 77 274 86C337 92 383 116 418 151C436 140 447 121 451 97C472 111 485 131 487 155C511 162 530 177 542 198C515 208 487 206 463 195C449 189 437 181 426 170C393 230 323 257 239 248C154 239 97 216 78 185Z" stroke-width="16" />
+          <circle cx="146" cy="163" r="7" fill="currentColor" stroke="none" />
+          <path d="M262 188C275 209 296 222 322 226" stroke-width="14" />
+          <path d="M212 86C207 69 196 58 181 52M222 86C230 68 243 58 258 54" stroke-width="12" />
+        </g>
+      </svg>
       <div class="spinner" aria-label="正在加载"></div>
       <div class="hint" role="status" data-loading-status>正在启动本地服务…</div>
     </main>

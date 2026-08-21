@@ -118,7 +118,7 @@ GET/HEAD/POST /api/desktop-browser/prefs     → { prefs } / {ok:true,prefs} / 4
 ### 路径 A：仓库 dev 模式（零手工，推荐）
 
 ```powershell
-# 先完全退出已安装的 DSH Desktop（单实例锁，否则 npm start 直接退给现有实例）
+# 先完全退出已安装的 DSH Dock（单实例锁，否则 npm start 直接退给现有实例）
 cd C:\Workspace\GitHub\DSHDesktop\desktop-shell
 npm start
 ```

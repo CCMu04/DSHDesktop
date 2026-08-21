@@ -1,6 +1,6 @@
 # 第三方声明
 
-DSH Desktop 下载或打包了第三方维护的软件。这些组件仍遵循其各自的开源许可。
+DSH Dock 下载或打包了第三方维护的软件。这些组件仍遵循其各自的开源许可。
 
 ## DeepSeek Harness
 
@@ -8,7 +8,7 @@ DSH Desktop 下载或打包了第三方维护的软件。这些组件仍遵循�
 - 版权：2026 DeepSeek
 - 许可：MIT
 
-DSH Desktop 是独立的社区封装项目，不修改 DeepSeek Harness 源码。"DeepSeek" 与 "DeepSeek Harness" 的名称和标识归其权利人所有；此处引用仅用于标识兼容性与被封装软件，不表示任何背书关系。
+DSH Dock 是独立的社区封装项目，不修改 DeepSeek Harness 源码。"DeepSeek" 与 "DeepSeek Harness" 的名称和标识归其权利人所有；此处引用仅用于标识兼容性与被封装软件，不表示任何背书关系。
 
 ## 其他依赖
 
