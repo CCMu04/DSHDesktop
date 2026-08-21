@@ -115,6 +115,14 @@ npm install
 npm run dist
 ```
 
+`npm run sync:dsh` 默认跟随 npm 的 `latest` 标签。验证官方预发布版本时，
+可在 PowerShell 中显式选择版本，避免后续构建无意持续跟随 `next`：
+
+```powershell
+$env:DSH_VERSION = '0.1.0-rc.8'
+npm run sync:dsh
+```
+
 产物位于 `dist/`。如需复现锁定版本（`build/runtime/node-x64.exe` 已下载过时可离线完成）：
 
 ```powershell
