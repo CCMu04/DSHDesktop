@@ -111,6 +111,7 @@ const desktopUpdateMarker = '__DSH_DESKTOP_UPDATE__:'
 // Windows toasts (HTML5 Notification → system notifications) are attributed
 // through the AppUserModelID: without it Electron falls back to a generic
 // identity and the notification may not surface under the app's name/icon.
+// Keep the legacy ID so upgrades retain the same Windows application identity.
 app.setAppUserModelId('ai.deepseek.harness.desktop')
 
 let backendProcess
@@ -619,7 +620,7 @@ function ensureTray() {
   tray = new Tray(
     nativeImage.createFromPath(path.join(shellDirectory, 'assets', 'icon.png')),
   )
-  tray.setToolTip('DeepSeek Harness')
+  tray.setToolTip('DSH Desktop')
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: '显示主窗口', click: showMainWindow },
@@ -1134,7 +1135,7 @@ app.whenReady().then(async () => {
     const details = recentBackendOutput.trim()
     await dialog.showMessageBox({
       type: 'error',
-      title: 'DeepSeek Harness failed to start',
+      title: 'DSH Desktop failed to start',
       message: error instanceof Error ? error.message : String(error),
       detail:
         details ||

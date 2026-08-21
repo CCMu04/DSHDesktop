@@ -1,7 +1,13 @@
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  nextDesktopVersion,
+  normalizeDshSelector,
+  normalizePublishedVersion,
+  pinRuntimePackages,
+} from '../lib/dsh-sync.mjs'
 
 const shellDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const manifestPath = path.join(shellDirectory, 'package.json')
@@ -30,59 +36,43 @@ if (!runtimePackages.includes('@deepseek-ai/dsh')) {
   throw new Error('The desktop shell does not declare @deepseek-ai/dsh.')
 }
 
-const latestDshVersion = JSON.parse(
-  runNpm(['view', '@deepseek-ai/dsh', 'dist-tags.latest', '--json'], true).trim(),
+const dshSelector = normalizeDshSelector(process.env.DSH_VERSION)
+const targetDshVersion = normalizePublishedVersion(
+  JSON.parse(
+    runNpm(['view', `@deepseek-ai/dsh@${dshSelector}`, 'version', '--json'], true).trim(),
+  ),
 )
 
-if (typeof latestDshVersion !== 'string' || !latestDshVersion) {
-  throw new Error('Unable to resolve the latest published DSH version.')
+if (typeof targetDshVersion !== 'string' || !targetDshVersion) {
+  throw new Error(
+    `Unable to resolve published DSH version for selector ${dshSelector}.`,
+  )
 }
 
-console.log(`Synchronizing the desktop runtime with DSH ${latestDshVersion}...`)
-runNpm([
-  'install',
-  '--save-exact',
-  ...runtimePackages.map(name => `${name}@${latestDshVersion}`),
-])
+console.log(
+  `Synchronizing the desktop runtime with DSH ${targetDshVersion} (selector: ${dshSelector})...`,
+)
+const pinnedManifest = pinRuntimePackages(manifest, runtimePackages, targetDshVersion)
+writeFileSync(manifestPath, `${JSON.stringify(pinnedManifest, null, 2)}\n`, 'utf8')
+// DSH publishes a large, mutually-referential peer graph. The desktop manifest
+// declares the non-DSH peer roots it needs (React and Electron Builder's
+// Squirrel backend), while `npm ls --all` in CI verifies the completed tree.
+// Avoid npm's exponential peer backtracking while updating the lockfile.
+runNpm(['install', '--legacy-peer-deps'])
 
 const installedManifest = JSON.parse(
   readFileSync(path.join(shellDirectory, 'node_modules', '@deepseek-ai', 'dsh', 'package.json'), 'utf8'),
 )
 
-if (installedManifest.version !== latestDshVersion) {
+if (installedManifest.version !== targetDshVersion) {
   throw new Error(
-    `Installed DSH ${installedManifest.version} does not match registry latest ${latestDshVersion}.`,
+    `Installed DSH ${installedManifest.version} does not match target ${targetDshVersion}.`,
   )
-}
-
-/**
- * Desktop-shell patch version: <official DSH version>.<major>.<minor>.
- * The patch line is owned by the shell's release history (e.g. the 6.5.x
- * series) and only ever advances: each `dist` bumps minor, keeping the
- * maintainer's line continuous across DSH upgrades.
- * Examples: 0.1.0-rc.6.5.3 → 0.1.0-rc.6.5.4 → ... → (DSH rc.7) 0.1.0-rc.7.5.5
- * @param currentVersion - the shell version before this sync.
- * @param latestDshVersion - the official DSH version this build follows.
- */
-function nextDesktopVersion(currentVersion, latestDshVersion) {
-  if (typeof currentVersion === 'string') {
-    // The patch number is the last two dot-separated numeric segments,
-    // regardless of the official prefix (which may itself contain digits).
-    const segments = currentVersion.split('.')
-    const major = Number.parseInt(segments[segments.length - 2] ?? '', 10)
-    const minor = Number.parseInt(segments[segments.length - 1] ?? '', 10)
-    if (Number.isInteger(major) && major >= 1 && Number.isInteger(minor)) {
-      return `${latestDshVersion}.${major}.${minor + 1}`
-    }
-  }
-  // No patch number on the current version: keep the bare official version.
-  // The shell patch line is maintained manually, so we never invent a number.
-  return latestDshVersion
 }
 
 runNpm([
   'version',
-  nextDesktopVersion(manifest.version, latestDshVersion),
+  nextDesktopVersion(manifest.version, targetDshVersion),
   '--no-git-tag-version',
   '--allow-same-version',
 ])

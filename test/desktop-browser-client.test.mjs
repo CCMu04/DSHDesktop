@@ -16,6 +16,8 @@ const tabRegistrations = []
 const markers = []
 const realConsoleLog = console.log
 const realSetTimeout = setTimeout
+let nextTimerId = 0
+const cancelledTimers = new Set()
 
 const listeners = new Map()
 globalThis.window = {
@@ -46,10 +48,13 @@ globalThis.console = {
 
 // 让 setTimeout 立即以微任务执行：加速 workbench 服务迟到重试路径。
 globalThis.setTimeout = (fn) => {
-  queueMicrotask(fn)
-  return 1
+  const id = ++nextTimerId
+  queueMicrotask(() => {
+    if (!cancelledTimers.has(id)) fn()
+  })
+  return id
 }
-globalThis.clearTimeout = realSetTimeout
+globalThis.clearTimeout = (id) => cancelledTimers.add(id)
 
 globalThis.requestAnimationFrame = (fn) => {
   queueMicrotask(fn)

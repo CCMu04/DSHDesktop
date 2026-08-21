@@ -1,22 +1,37 @@
-# DSH Desktop v0.1.0-rc.7.6.6 预览版
+# DSH Desktop v0.1.0-rc.8.6.7 预览版
 
-官方 DSH 运行时升级 0.1.0-rc.6 → 0.1.0-rc.7；两张设置卡片迁移到 rc.7 的 keyed 设置插槽契约；内置浏览器开发中暂不随安装包分发。
+本次升级将官方 DSH 运行时从 0.1.0-rc.7 更新到 0.1.0-rc.8，同时完成桌面端品牌调整、依赖同步加固和 rc.8 插件生命周期兼容修复。
 
-## 更新内容
+## 用户可见更新
 
-- **官方 DSH 0.1.0-rc.7**：跟随上游新功能（插件可自行注册设置卡片、Codex/Claude Code 子代理接入 Job Panel、DeepSeek 模型 `low` 推理强度、提问卡片折叠保留草稿等）与修复（极简模式持久 Bash 卡顿、max-token 截断会话续跑、大历史分页栈溢出、node-pty 1.2 beta PTY 兼容性）。
-- **设置卡片兼容 rc.7 keyed 契约**：官方 rc.7 将 `settings.plugin.item` 改为按 settings 命名空间 keyed（插件自注册设置卡片）。「功能增强」聚合卡（`desktop-features`）与「视觉增强」配置卡（`desktop-ui`）均已迁移：宿主半登记同名命名空间、client 卡片以 key 注册；`desktop-ui` 的配置读写优先走 DSH 设置存储，旧 `desktop-ui.json` 自动并入并持续镜像，降级不丢配置。
-- **内置浏览器开发中**（`dsh-desktop-browser`，工作台网页浏览）：暂不随安装包分发，仓库源码保留、开发模式可部署调试。
-- **启动修复**：插件宿主半的运行时依赖解析（`builtin-plugins` 部署目录 junction 到运行时 `@deepseek-ai`）与 `dsh-desktop-features` 宿主半重复导出问题均已修复，直接 `dsh web` 可正常启动。
-- **桌面端启动修复**：修复 `prepareBundledPlugins` 计算运行时 `node_modules` 根时的路径错误（此前把 DSH 包目录误当运行时根，导致安装版每次启动都报「Bundled runtime packages are missing」）；并新增「剪除不再分发插件在 web profile 里的引用」，避免插件从安装包移除后留下幽灵 link 令 App 启动失败且重装无法恢复。
+- **官方 DSH rc.8**：支持 DeepSeek 原生多模态请求；图片附件可传入 slash command，图片也能用于仅图片的计划请求；新增文件与会话引用。
+- **Windows Agent 体验**：PowerShell 改为可持续复用的 PTY，会话内的状态与输出处理更稳定。
+- **Codex / Claude Code 子代理**：Provider 可直接安装，支持命名实例、非交互权限模式和更完整的失败信息保留。
+- **Web UI 与模型配置**：模型选择器支持批量选择；默认模型重试次数统一为 5；补齐 OpenAI 兼容网关开关；修复文件打开失败反馈、工作区搜索、消息反馈编辑器与多项布局问题。
+- **全新桌面品牌**：应用名、快捷方式、加载页和托盘统一显示 `DSH Desktop`，使用独立终端窗口图标；内部应用 ID 保留，现有安装可直接覆盖升级。
+
+## 桌面端修复与构建改进
+
+- 修复 rc.8 下文件 / Git 插件等待工作台服务时可能被重复注册的问题，页面不再出现 `duplicate tab id` 错误。
+- DSH 同步命令支持通过 `DSH_VERSION` 精确指定预览版本，并兼容 npm 10 / npm 12 的版本查询输出。
+- pnpm 更新到 11.22.0；移除无用的根 `node-gyp` 依赖，原生模块继续使用 Electron 构建链提供的兼容版本。
+- CI 和发布构建新增完整依赖树校验；React / ReactDOM 与 Windows Squirrel 构建 peer 已显式锁定。
+
+## 升级说明
+
+- 桌面端继续复用 `~/.dsh`，现有设置、凭据、会话、Profiles 与用户插件保持不变。
+- 默认 Web Profile 使用 JSONL 会话持久化，本版本没有启用 rc.8 的可选 SQLite v2 布局，普通用户无需迁移数据。
+- 如果你自行启用了 SQLite 持久化插件，请先备份 DSH Home，并根据上游 rc.8 的 SQLite v2 布局说明单独评估迁移。
 
 ## 验证
 
-- 自动化测试全部通过（76 项）。
-- 新安装包产物（NSIS + 便携版）已构建并校验：运行时为 rc.7、插件目录不含 dsh-desktop-browser。
+- 82 项自动化测试全部通过。
+- Node.js 24 + npm 10 标准 `npm ci` 和完整 `npm ls --all` 通过。
+- rc.8 Web UI 首次使用页、主工作区与内置文件 / Git 标签完成隔离启动验证，浏览器控制台无错误。
+- Windows x64 的 NSIS 安装包与便携版均已成功构建；运行时归档确认包含 DSH 0.1.0-rc.8。
 
 ## 相关文档
 
 - [README.md](https://github.com/CCMu04/DSHDesktop/blob/main/README.md)：项目介绍、下载安装与构建说明
 - [CHANGELOG.md](https://github.com/CCMu04/DSHDesktop/blob/main/CHANGELOG.md)：全部版本变更记录
-- [docs/TEMPLATES.md](https://github.com/CCMu04/DSHDesktop/blob/main/docs/TEMPLATES.md)：文档格式模板
+- [DSH rc.8 上游提交](https://github.com/deepseek-ai/deepseek-harness/commit/141eb6fef83422698aef7a981029e843e8161534)：官方版本基线

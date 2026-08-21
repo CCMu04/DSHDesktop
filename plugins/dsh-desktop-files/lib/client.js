@@ -1579,8 +1579,11 @@ window.__ModuleLoader__.load({
       const disposers = [];
       let attempts = 0;
       let workbench = null;
+      let retryTimer = null;
+      let disposed = false;
       const install = () => {
-        if (workbench !== null) return;
+        retryTimer = null;
+        if (disposed || workbench !== null) return;
         let candidate;
         try {
           candidate = ctx.get("desktop.workbench");
@@ -1590,7 +1593,7 @@ window.__ModuleLoader__.load({
         if (candidate === void 0) {
           if (attempts < ddffRetryLimit) {
             attempts += 1;
-            setTimeout(install, ddffRetryMs);
+            retryTimer = setTimeout(install, ddffRetryMs);
           }
           return;
         }
@@ -1690,6 +1693,8 @@ window.__ModuleLoader__.load({
       };
       install();
       return () => {
+        disposed = true;
+        if (retryTimer !== null) clearTimeout(retryTimer);
         for (const dispose of disposers) dispose();
       };
     }
