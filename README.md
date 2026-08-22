@@ -44,7 +44,7 @@ DSH Dock 是独立的非官方社区桌面封装，不是 DeepSeek 或 DeepSeek 
 
 因此将来安装官方 DSH 后，可以继续使用已有设置、会话和插件。用户创建的插件应放在 `~/.dsh/plugins`（或自己的项目目录）；Web Profile 的安装记录位于 `~/.dsh/profiles/web`。这些目录都不属于桌面端可替换的运行时缓存。
 
-内置插件采用多插件结构：`plugins/` 下的每个 `dsh-desktop-*` 目录都是一个独立插件（各自携带 host/client 两半与 patch 行），启动时逐个按内容指纹部署并注册。目前内置九个插件：
+内置插件采用多插件结构：`plugins/` 下的每个 `dsh-desktop-*` 目录都是一个独立插件（各自携带 host/client 两半与 patch 行），启动时逐个按内容指纹部署并注册。目前内置十个插件：
 
 - `dsh-desktop-workbench` — **工作台框架**：对话页右侧分栏（文件 / Git 面板的宿主，页签行 [|] 按钮开关）
 - `dsh-desktop-files` — **功能增强：文件工作台**
@@ -55,6 +55,7 @@ DSH Dock 是独立的非官方社区桌面封装，不是 DeepSeek 或 DeepSeek 
 - `dsh-desktop-context-menu` — **功能增强：右键菜单**
 - `dsh-desktop-notify` — **功能增强：完成提醒**
 - `dsh-desktop-tray` — **托盘命令桥**（新建任务 / 添加工作区 / 检查更新）
+- `dsh-desktop-opencode-models` — **OpenCode 实时模型发现**：Zen / Go 每次主动获取模型时查询当前 `/models`，并用 Models.dev 的逐模型协议元数据保证目录外模型可保存、可路由；不维护静态白名单
 
 > `dsh-desktop-browser`（工作台内置浏览器）正在开发中：仓库源码随 `npm start` 开发模式部署调试，但**暂不随安装包分发**（打包配置里的 `extraResources` 过滤器已排除它，转正式时移除过滤器即随下一版发布）。
 
@@ -125,7 +126,7 @@ npm run dist
 可在 PowerShell 中显式选择版本，避免后续构建无意持续跟随 `next`：
 
 ```powershell
-$env:DSH_VERSION = '0.1.0-rc.8'
+$env:DSH_VERSION = '0.1.1-rc.2'
 npm run sync:dsh
 ```
 

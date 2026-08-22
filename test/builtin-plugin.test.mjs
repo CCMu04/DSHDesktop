@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { ensureBundledPlugin, pruneBundledPluginReferences } from '../lib/builtin-plugin.mjs'
+import {
+  ensureBundledPlugin,
+  ensurePluginRuntimeExports,
+  pruneBundledPluginReferences,
+} from '../lib/builtin-plugin.mjs'
 
 function fixture(root, version = '1.0.0', body = 'first') {
   const sourceDirectory = path.join(root, 'source')
@@ -59,6 +63,29 @@ test('enables again after bundled content changes or for another DSH Home', asyn
     readFileSync(path.join(userDataDirectory, 'builtin-plugins', 'dsh-desktop-ui', 'lib', 'index.js'), 'utf8'),
     'updated\n',
   )
+})
+
+test('exposes the official runtime scopes required by bundled host plugins', t => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-desktop-runtime-scopes-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const runtime = path.join(root, 'runtime', 'node_modules')
+  const userData = path.join(root, 'user-data')
+  for (const scope of ['@deepseek-ai', '@earendil-works']) {
+    mkdirSync(path.join(runtime, scope), { recursive: true })
+  }
+
+  ensurePluginRuntimeExports({
+    userDataDirectory: userData,
+    runtimeNodeModulesDirectory: runtime,
+  })
+
+  for (const scope of ['@deepseek-ai', '@earendil-works']) {
+    const link = path.join(userData, 'builtin-plugins', 'node_modules', scope)
+    assert.equal(
+      path.resolve(readlinkSync(link)).toLowerCase(),
+      path.resolve(runtime, scope).toLowerCase(),
+    )
+  }
 })
 
 test('prunes bundled-plugin references that no longer ship from the web profile', async (t) => {

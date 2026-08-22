@@ -1,0 +1,23 @@
+{
+  "name": "dsh-desktop-opencode-models",
+  "private": true,
+  "version": "1.0.0",
+  "description": "DSH Dock host enhancement that refreshes OpenCode Zen and Go models live and supplies per-model routing metadata for newly discovered entries.",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  }
+}
