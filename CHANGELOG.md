@@ -2,6 +2,29 @@
 
 本文件记录 DSH Dock 各版本的变更，新版本在上。格式固定为：版本标题（`## v<版本号> — <日期>`）+ 分类小节（新增 / 修复 / 变更 / 移除）。模板见 [docs/TEMPLATES.md](docs/TEMPLATES.md)。
 
+## v0.1.1-rc.2.6.9 — 2026-08-22
+
+官方 DSH 运行时升级到 0.1.1-rc.2，并新增 OpenCode Zen / Go 实时模型发现：每次用户主动刷新都读取当前 `/models`，目录外的新模型可以通过官方 Models 页面选择、保存和调用。
+
+### 新增
+
+- **OpenCode 实时模型发现插件**：新增内置 `dsh-desktop-opencode-models` Cordis 插件，只装饰官方 `llm-pi-ai` model-discovery 注册；`opencode` 与 `opencode-go` 每次刷新分别查询当前 Zen / Go endpoint，其他 provider 继续使用官方行为。
+- **逐模型协议补全**：对实时目录中新出现、当前 pi-ai catalog 尚未收录的模型，使用 Models.dev provider 元数据补充模型自己的 wire protocol，不对整条混合协议 route 强制设置统一 `api`。成功解析的非敏感路由元数据写入 DSH Home 下的 bootstrap cache，确保保存后和重启后仍能通过官方 adapter 校验。
+- **元数据源离线降级**：Models.dev API 与公开源码都不可达时，已成功取得的 OpenCode 实时列表不再被阻塞；目录外模型采用 OpenCode provider 声明的 OpenAI-compatible 默认协议，并在后续刷新继续尝试逐模型 override。
+
+### 变更
+
+- **官方 DSH 运行时升级 0.1.0-rc.8 → 0.1.1-rc.2**：同步获得 DeepSeek 视觉模型更新、Files API 图片上传与复用、按模型要求自动缩放和格式转换、Markdown 表格与交互优化，以及上游安全修复。
+- **桌面 runtime 根依赖更新**：全部显式 `@deepseek-ai/dsh*` 包锁定到 0.1.1-rc.2，并补充新版 pi-ai adapter 所需的 `@deepseek-ai/dsh-authorization`；打包后端继续使用 Node.js 24.18.1。
+- **内置插件 runtime exports 扩展**：除 `@deepseek-ai` 外，部署期也向内置宿主插件暴露官方 adapter 使用的 `@earendil-works` scope，不在插件目录复制依赖。
+
+### 修复
+
+- **启动时报 `exports is not defined`**：OpenCode 插件的最小 client half 改为符合当前 ModuleLoader 契约的显式 CommonJS facade，不再引用未定义的顶层 `exports`。
+- **原生 OpenCode / OpenCode Go 刷新仍返回旧目录**：官方 discovery 对 pi-ai 已知 provider 会直接返回安装时 catalog；插件现在只对两个明确 route 绕过该短路并请求实时 `/models`。
+- **采用新模型时保存报 `needs an api`**：目录外候选在进入官方设置写路径前补齐逐模型协议，保留同一路由中 `openai-responses`、`openai-completions`、Anthropic 与 Google 模型各自的 wire protocol。
+- **Models.dev 不可达导致刷新失败**：辅助元数据网络失败不再覆盖已成功的 OpenCode listing；API key、Authorization header 和 credential store 内容均不进入日志或持久化元数据。
+
 ## v0.1.0-rc.8.6.8 — 2026-08-21
 
 桌面端正式启用 `DSH Dock` 独立品牌，完成主图标、字标和辅助形象的统一，并补充项目与上游品牌关系说明。

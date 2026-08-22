@@ -160,7 +160,7 @@ plugins/dsh-desktop-<name>/
 职责：开关持久化 + 提供 HTTP API。核心约定：
 
 - 导出 `name`（与 patch 行 id 一致）、`inject = ["webServer"]`、`DEFAULT_CONFIG`、`apply(ctx, config)`；
-- **宿主半可以 import 运行时提供的 `@deepseek-ai/*` 包**（如 `dsh-settings`、`schemastery`）：部署期 `main.mjs` 会把运行时的 `@deepseek-ai` 目录 junction 到 `builtin-plugins/node_modules/@deepseek-ai`（见 §11 步骤 0），插件裸导入即可命中运行时版本；**不应**在插件目录内自带 node_modules；
+- **宿主半可以 import 运行时提供的 `@deepseek-ai/*` 包及已暴露的官方 adapter 依赖**（当前包括 `@earendil-works/pi-ai`）：部署期 `main.mjs` 会把相应运行时 scope junction 到 `builtin-plugins/node_modules`（见 §11 步骤 0），插件裸导入即可命中运行时版本；**不应**在插件目录内自带 node_modules；新增其他 runtime scope 前必须同步扩展并测试 `ensurePluginRuntimeExports`，不能假定依赖会沿官方包自动透传；
 - **开关配置路由统一为**：`/api/desktop-<name>/config`，`kind: "exact"`，一个 handler 分发 GET/HEAD/POST（官方 `dsh-host-webserver` 拒绝重复 `(kind, path)` 注册）；**功能路由按需增加**（如目录树、文本读写、状态/diff 等功能路由），全部受 §6.1 安全基线约束，并在 README「宿主 API 契约」登记；
 - **配置合并顺序**：内置默认值 ← 插件行 `config`（patch 层）← 用户开关文档，后覆盖前；
 - 需在官方「插件设置」页出卡片的插件，宿主半**必须登记一个 settings 命名空间**（`@deepseek-ai/dsh-settings` 的 `settingsNamespace` + `installSettingsSection` 或 `ctx.settings.register`），否则 rc.7 起 keyed 的 `settings.plugin.item` 槽永远不调度该卡片（见 §7.4.1）；登记时若无自有编辑字段（聚合卡），schema 用空对象即可。
@@ -360,7 +360,7 @@ ctx.slots.inject("settings.plugin.item", () =>
 
 应用启动时（`main.mjs` → `prepareBundledPlugins`）：
 
-0. **建立运行时依赖 junction**（`ensurePluginRuntimeExports`）：把运行时的 `@deepseek-ai` 目录 junction 到 `builtin-plugins/node_modules/@deepseek-ai`——插件物理位置在 builtin-plugins 下，Node 裸导入沿真实路径向上解析够不到运行时 node_modules，宿主半一旦 import `@deepseek-ai/*` 就会 `ERR_MODULE_NOT_FOUND`；运行时目录变化（升级）时自动重建。**目标路径注意**：运行时 `node_modules` 根 = `path.dirname(path.dirname(selectedRuntimeDirectory))`（`selectedRuntimeDirectory` 指向 `…/@deepseek-ai/dsh`，向上两级才是 node_modules 根），不要在它下面再拼 `node_modules`。**手动把插件拷进 builtin-plugins 调试宿主半的 `@deepseek-ai/*` 导入时，需确认该 junction 存在**（缺失时用 `New-Item -ItemType Junction` 重建）。
+0. **建立运行时依赖 junction**（`ensurePluginRuntimeExports`）：把运行时的 `@deepseek-ai` 与已批准的官方 adapter 依赖 scope（当前 `@earendil-works`）junction 到 `builtin-plugins/node_modules`——插件物理位置在 builtin-plugins 下，Node 裸导入沿真实路径向上解析够不到运行时 node_modules，缺少对应 scope 会 `ERR_MODULE_NOT_FOUND`；运行时目录变化（升级）时自动重建。**目标路径注意**：运行时 `node_modules` 根 = `path.dirname(path.dirname(selectedRuntimeDirectory))`（`selectedRuntimeDirectory` 指向 `…/@deepseek-ai/dsh`，向上两级才是 node_modules 根），不要在它下面再拼 `node_modules`。**手动把插件拷进 builtin-plugins 调试宿主半的 runtime import 时，需确认对应 junction 存在**（缺失时用 `New-Item -ItemType Junction` 重建）。
 1. 扫描 `plugins/` 下所有 `dsh-desktop-*` 目录；
 2. 对每个插件计算**内容指纹**（`version + 全文件 sha256`），与 `builtin-plugins.json`（`%APPDATA%\deepseek-harness-desktop\builtin-plugins.json`，按 DSH Home 键控）比对；
 3. 指纹匹配 → 跳过（**用户已做的启停选择保持不变**）；指纹变化或首次 → 部署到 `builtin-plugins/<package>` 并注册：`dsh plugin --profile web add --offline link:<部署目录>`（幂等）。

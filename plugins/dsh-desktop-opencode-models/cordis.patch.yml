@@ -1,0 +1,10 @@
+# Replace the stock llm-pi-ai composition row with this decorator. The decorator
+# invokes the unmodified official plugin and changes only the public discovery
+# callback registered for the llm-pi-ai settings namespace.
+- id: llm-pi-ai
+  name: "@deepseek-ai/dsh-llm-pi-ai"
+  disabled: true
+
+- insert:
+    - id: dsh-desktop-opencode-models
+      name: dsh-desktop-opencode-models

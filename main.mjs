@@ -432,9 +432,9 @@ function prepareBackendContext() {
 
 async function prepareBundledPlugins(context) {
   // 内置插件的宿主半可以 import 运行时提供的 @deepseek-ai/* 包（如
-  // dsh-settings / schemastery）。插件部署在 builtin-plugins 下，Node 裸导入
-  // 沿真实路径向上解析够不到运行时 node_modules，因此把运行时的
-  // @deepseek-ai 目录 junction 到 builtin-plugins/node_modules/@deepseek-ai。
+  // dsh-settings / schemastery）以及官方 adapter 的公开依赖（pi-ai）。插件部署在
+  // builtin-plugins 下，Node 裸导入沿真实路径向上解析够不到运行时 node_modules，
+  // 因此把对应依赖作用域 junction 到 builtin-plugins/node_modules。
   // selectedRuntimeDirectory 是 `<nodeModules根>/@deepseek-ai/dsh`，向上两级
   // 即父目录（打包= runtime-cache/current/node_modules；开发= shell/node_modules）。
   const runtimeNodeModulesDirectory = path.dirname(
